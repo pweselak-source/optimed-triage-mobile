@@ -41,46 +41,46 @@ type Doctor = {
 
 const doctors: Doctor[] = [
   {
-    id: 'anna-nowak',
-    name: 'lek. Anna Nowak',
-    specialty: 'Medycyna rodzinna',
+    id: 'ewa-nowaczyk-rogowska',
+    name: 'lek. Ewa Nowaczyk-Rogowska',
+    specialty: 'Internista',
     isPrimary: true,
     location: 'ul. 30-go Stycznia 55',
   },
   {
-    id: 'jan-kowalski',
-    name: 'lek. Jan Kowalski',
+    id: 'anna-freza',
+    name: 'lek. Anna Freza',
     specialty: 'Internista',
     isPrimary: false,
     location: 'ul. Jasia i Małgosi 8/4',
   },
   {
-    id: 'maria-wisniewska',
-    name: 'lek. Maria Wiśniewska',
-    specialty: 'Pediatra',
-    isPrimary: false,
-    location: 'ul. Dąbrowskiego 10',
-  },
-  {
-    id: 'tomasz-mazur',
-    name: 'lek. Tomasz Mazur',
-    specialty: 'Ortopeda',
-    isPrimary: false,
-    location: 'ul. Piaskowa 3',
-  },
-  {
-    id: 'katarzyna-lis',
-    name: 'lek. Katarzyna Lis',
-    specialty: 'Dermatolog',
+    id: 'agnieszka-biedrzycka',
+    name: 'lek. Agnieszka Biedrzycka',
+    specialty: 'Okulista',
     isPrimary: false,
     location: 'ul. 30-go Stycznia 55',
   },
   {
-    id: 'michal-krawczyk',
-    name: 'lek. Michał Krawczyk',
+    id: 'hanna-pardo',
+    name: 'lek. Hanna Pardo',
+    specialty: 'Reumatolog',
+    isPrimary: false,
+    location: 'ul. Piaskowa 3',
+  },
+  {
+    id: 'tomasz-mazur',
+    name: 'lek. Tomasz Mazur',
     specialty: 'Kardiolog',
     isPrimary: false,
     location: 'ul. Jasia i Małgosi 8/4',
+  },
+  {
+    id: 'jan-kowalski',
+    name: 'lek. Jan Kowalski',
+    specialty: 'Ortopeda',
+    isPrimary: false,
+    location: 'ul. Dąbrowskiego 10',
   },
 ];
 
@@ -90,12 +90,22 @@ const dateOptions = [
   { key: 'dayAfter' as const, label: 'Pojutrze' },
 ];
 
+const SPECIALTIES = [
+  '🌟 Twój lekarz',
+  'dowolny specjalista',
+  'Internista',
+  'Okulista',
+  'Reumatolog',
+  'Kardiolog',
+  'Ortopeda',
+] as const;
+
 const LOCATIONS = [
-  'Dowolna placówka w Tczewie',
+  'dowolna placówka w Tczewie',
   'ul. 30-go Stycznia 55',
   'ul. Jasia i Małgosi 8/4',
-  'ul. Dąbrowskiego 10',
   'ul. Piaskowa 3',
+  'ul. Dąbrowskiego 10',
 ] as const;
 
 type DateKey = (typeof dateOptions)[number]['key'] | 'custom';
@@ -103,11 +113,27 @@ type DateKey = (typeof dateOptions)[number]['key'] | 'custom';
 export default function BookingScreen() {
   const router = useRouter();
 
+  const initialToday = new Date();
+  initialToday.setHours(0, 0, 0, 0);
+  const initialIso =
+    initialToday.getFullYear() +
+    '-' +
+    String(initialToday.getMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(initialToday.getDate()).padStart(2, '0');
+  const initialLabel = initialToday.toLocaleDateString('pl-PL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
   const [selectedDateKey, setSelectedDateKey] = useState<DateKey>('today');
-  const [selectedDateLabel, setSelectedDateLabel] = useState<string>('Dzisiaj');
-  const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<(typeof LOCATIONS)[number]>('Dowolna placówka w Tczewie');
-  const [tempLocation, setTempLocation] = useState<(typeof LOCATIONS)[number]>('Dowolna placówka w Tczewie');
+  const [selectedDateLabel, setSelectedDateLabel] = useState<string>(initialLabel);
+  const [selectedDateIso, setSelectedDateIso] = useState<string | null>(initialIso);
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('🌟 Twój lekarz');
+  const [tempSpecialty, setTempSpecialty] = useState<string>('🌟 Twój lekarz');
+  const [selectedLocation, setSelectedLocation] = useState<(typeof LOCATIONS)[number]>('dowolna placówka w Tczewie');
+  const [tempLocation, setTempLocation] = useState<(typeof LOCATIONS)[number]>('dowolna placówka w Tczewie');
   const [selectedBooking, setSelectedBooking] = useState<{
     doctor: Doctor;
     time: string;
@@ -116,7 +142,8 @@ export default function BookingScreen() {
   const [isCalendarVisible, setIsCalendarVisible] = useState<boolean>(false);
   const [isBookingSuccess, setIsBookingSuccess] = useState<boolean>(false);
   const [isConfirmVisible, setIsConfirmVisible] = useState<boolean>(false);
-  const [isLocationModalVisible, setIsLocationModalVisible] = useState<boolean>(true);
+  const [isWizardVisible, setIsWizardVisible] = useState<boolean>(true);
+  const [wizardStep, setWizardStep] = useState<number>(1);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -150,9 +177,22 @@ export default function BookingScreen() {
   }, []);
 
   const visibleDoctors = useMemo(() => {
-    if (selectedLocation === 'Dowolna placówka w Tczewie') return sortedDoctors;
-    return sortedDoctors.filter((d) => d.location === selectedLocation);
-  }, [sortedDoctors, selectedLocation]);
+    let base = sortedDoctors;
+
+    // Filtr po lokalizacji
+    if (selectedLocation !== 'dowolna placówka w Tczewie') {
+      base = base.filter((d) => d.location === selectedLocation);
+    }
+
+    // Filtr po specjalizacji
+    if (selectedSpecialty === '🌟 Twój lekarz') {
+      return base.filter((d) => d.isPrimary);
+    }
+    if (selectedSpecialty === 'dowolny specjalista') {
+      return base;
+    }
+    return base.filter((d) => d.specialty === selectedSpecialty);
+  }, [sortedDoctors, selectedLocation, selectedSpecialty]);
 
   const getSelectedDate = (): Date => {
     if (selectedDateKey === 'today') {
@@ -179,14 +219,32 @@ export default function BookingScreen() {
     if (d < today) return [];
 
     const dayOfWeek = d.getDay(); // 0 = Sun, 6 = Sat
+
+    // Deterministyczna "losowość" na podstawie daty,
+    // żeby mock wyglądał naturalniej, ale był stabilny.
+    const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+
+    const patterns: string[][] = [
+      [], // brak terminów
+      ['09:00', '10:30'],
+      ['09:00', '10:30', '13:15'],
+      ['08:30', '11:00', '14:30'],
+      ['08:30', '11:00', '14:30', '16:15'],
+      ['09:15', '12:00', '15:45'],
+    ];
+
+    let idx = seed % patterns.length;
+    let times = patterns[idx];
+
+    // Weekendy: częściej pusto, czasem kilka terminów
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return [];
+      if (seed % 3 !== 0) {
+        times = [];
+      } else {
+        times = patterns[(idx + 1) % patterns.length].slice(0, 2);
+      }
     }
 
-    const baseEven = ['09:00', '10:30', '13:15', '15:00'];
-    const baseOdd = ['08:30', '11:00', '14:30', '16:15'];
-    const isEvenDay = d.getDate() % 2 === 0;
-    const times = isEvenDay ? baseEven : baseOdd;
     return times.map((time) => ({ time }));
   };
 
@@ -247,7 +305,7 @@ export default function BookingScreen() {
           <View style={styles.doctorHeaderText}>
             <Text style={styles.doctorName}>{item.name}</Text>
             <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
-            {selectedLocation === 'Dowolna placówka w Tczewie' && (
+            {selectedLocation === 'dowolna placówka w Tczewie' && (
               <Text style={styles.doctorLocation}>{item.location}</Text>
             )}
           </View>
@@ -320,8 +378,22 @@ export default function BookingScreen() {
           <TouchableOpacity
             style={styles.successButton}
             activeOpacity={0.9}
-            onPress={() => router.replace('/')}>
-            <Text style={styles.successButtonText}>Wróć do Strefy Pacjenta</Text>
+            onPress={() =>
+              router.replace({
+                pathname: '/my-visits',
+                params: {
+                  newVisit: JSON.stringify({
+                    id: Date.now().toString(),
+                    doctorName: selectedBooking.doctor.name,
+                    specialty: selectedSpecialty,
+                    date: selectedBooking.dateIso,
+                    time: selectedBooking.time,
+                    location: selectedBooking.doctor.location,
+                  }),
+                },
+              } as never)
+            }>
+            <Text style={styles.successButtonText}>Przejdź do Moich Wizyt</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -331,7 +403,7 @@ export default function BookingScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Sticky header: daty + tytuł */}
+        {/* Sticky header: daty + podsumowanie wyboru */}
         <View style={styles.stickyHeader}>
           <View style={styles.dateRow}>
             {dateOptions.map((opt) => {
@@ -344,9 +416,27 @@ export default function BookingScreen() {
                     isActive && styles.dateChipActive,
                   ]}
                   onPress={() => {
+                    let offset = 0;
+                    if (opt.key === 'tomorrow') offset = 1;
+                    if (opt.key === 'dayAfter') offset = 2;
+                    const base = new Date(initialToday.getTime());
+                    base.setDate(base.getDate() + offset);
+                    base.setHours(0, 0, 0, 0);
+                    const iso =
+                      base.getFullYear() +
+                      '-' +
+                      String(base.getMonth() + 1).padStart(2, '0') +
+                      '-' +
+                      String(base.getDate()).padStart(2, '0');
                     setSelectedDateKey(opt.key);
-                    setSelectedDateLabel(opt.label);
-                    setSelectedDateIso(null);
+                    setSelectedDateIso(iso);
+                    setSelectedDateLabel(
+                      base.toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      }),
+                    );
                     setSelectedBooking(null);
                   }}
                   activeOpacity={0.8}>
@@ -371,19 +461,32 @@ export default function BookingScreen() {
           </View>
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Dostępne terminy</Text>
-            <Text style={styles.sectionDateInfo}>Dzień: {selectedDateLabel}</Text>
             <TouchableOpacity
-              style={styles.locationRow}
+              style={styles.wizardSummary}
               activeOpacity={0.8}
               onPress={() => {
+                setTempSpecialty(selectedSpecialty);
                 setTempLocation(selectedLocation);
-                setIsLocationModalVisible(true);
+                setWizardStep(1);
+                setIsWizardVisible(true);
               }}>
-              <Text style={styles.locationText}>
-                Wybrana placówka: {selectedLocation}
-              </Text>
-              <Ionicons name="swap-horizontal-outline" size={18} color="#2563EB" />
+              <View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Dzień wizyty:</Text>
+                  <Text style={styles.infoValue}>{selectedDateLabel}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Specjalista:</Text>
+                  <Text style={styles.infoValue}>
+                    {selectedSpecialty === '🌟 Twój lekarz' ? 'Twój lekarz' : selectedSpecialty}
+                  </Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Placówka:</Text>
+                  <Text style={styles.infoValue}>{selectedLocation}</Text>
+                </View>
+              </View>
+              <Ionicons name="swap-horizontal-outline" size={20} color="#2563EB" />
             </TouchableOpacity>
           </View>
         </View>
@@ -501,10 +604,20 @@ export default function BookingScreen() {
                     String(dateObj.getDate()).padStart(2, '0');
                   const isSelected = selectedDateIso === iso;
 
+                  const hasAvailability =
+                    !isPast &&
+                    getAvailableSlotsForDate(dateObj).length > 0 &&
+                    visibleDoctors.length > 0;
+
                   const DayInner = (
                     <View
                       style={[
                         styles.calendarDayInner,
+                        !isSelected &&
+                          !isPast &&
+                          (hasAvailability
+                            ? styles.calendarDayInnerAvailable
+                            : styles.calendarDayInnerUnavailable),
                         isSelected && styles.calendarDayInnerSelected,
                       ]}>
                       <Text
@@ -532,7 +645,7 @@ export default function BookingScreen() {
                         activeOpacity={0.8}
                         onPress={() => {
                           setSelectedDateKey('custom');
-                          setSelectedDateLabel(iso);
+                          setSelectedDateLabel(formatDisplayDate(iso));
                           setSelectedDateIso(iso);
                           setSelectedBooking(null);
                           setIsCalendarVisible(false);
@@ -550,60 +663,130 @@ export default function BookingScreen() {
         </View>
       </Modal>
 
-      {/* Modal wyboru lokalizacji */}
+      {/* Kreator (Wizard) wyboru specjalizacji i lokalizacji */}
       <Modal
-        visible={isLocationModalVisible}
+        visible={isWizardVisible}
         transparent
         animationType="fade"
         onRequestClose={() => {
+          setTempSpecialty(selectedSpecialty);
           setTempLocation(selectedLocation);
-          setIsLocationModalVisible(false);
+          setWizardStep(1);
+          setIsWizardVisible(false);
         }}>
         <View style={styles.modalOverlay}>
           <View style={styles.locationCard}>
-            <Text style={styles.locationTitle}>Wybierz placówkę</Text>
-            {LOCATIONS.map((loc) => {
-              const isActive = tempLocation === loc;
-              return (
-                <TouchableOpacity
-                  key={loc}
-                  style={[
-                    styles.locationOption,
-                    isActive && styles.locationOptionActive,
-                  ]}
-                  activeOpacity={0.8}
-                  onPress={() => setTempLocation(loc)}>
-                  <Text
-                    style={[
-                      styles.locationOptionText,
-                      isActive && styles.locationOptionTextActive,
-                    ]}>
-                    {loc}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            {wizardStep === 1 && (
+              <>
+                <Text style={styles.locationTitle}>Kogo szukasz?</Text>
+                <ScrollView style={{ maxHeight: 260 }}>
+                  {SPECIALTIES.map((spec) => {
+                    const isActive = tempSpecialty === spec;
+                    return (
+                      <TouchableOpacity
+                        key={spec}
+                        style={[
+                          styles.locationOption,
+                          isActive && styles.locationOptionActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => setTempSpecialty(spec)}>
+                        <Text
+                          style={[
+                            styles.locationOptionText,
+                            isActive && styles.locationOptionTextActive,
+                          ]}>
+                          {spec}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
 
-            <View style={styles.locationButtonsRow}>
-              <TouchableOpacity
-                style={[styles.locationButton, styles.locationButtonSecondary]}
-                activeOpacity={0.8}
-                onPress={() => {
-                  setTempLocation(selectedLocation);
-                  setIsLocationModalVisible(false);
-                }}>
-                <Text style={styles.locationButtonSecondaryText}>Anuluj</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.locationButton, styles.locationButtonPrimary]}
-                activeOpacity={0.9}
-                onPress={() => {
-                  setSelectedLocation(tempLocation);
-                  setIsLocationModalVisible(false);
-                }}>
-                <Text style={styles.locationButtonPrimaryText}>Zatwierdź</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.locationButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.locationButton, styles.locationButtonSecondary]}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setTempSpecialty(selectedSpecialty);
+                      setTempLocation(selectedLocation);
+                      setWizardStep(1);
+                      setIsWizardVisible(false);
+                    }}>
+                    <Text style={styles.locationButtonSecondaryText}>Anuluj</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.locationButton, styles.locationButtonPrimary]}
+                    activeOpacity={0.9}
+                    onPress={() => setWizardStep(2)}>
+                    <Text style={styles.locationButtonPrimaryText}>Dalej</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {wizardStep === 2 && (
+              <>
+                <View style={styles.wizardStepHeader}>
+                  <TouchableOpacity
+                    onPress={() => setWizardStep(1)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="arrow-back" size={20} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={styles.locationTitle}>Gdzie chcesz pójść?</Text>
+                  <View style={{ width: 20 }} />
+                </View>
+
+                <ScrollView style={{ maxHeight: 260 }}>
+                  {LOCATIONS.map((loc) => {
+                    const isActive = tempLocation === loc;
+                    return (
+                      <TouchableOpacity
+                        key={loc}
+                        style={[
+                          styles.locationOption,
+                          isActive && styles.locationOptionActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => setTempLocation(loc)}>
+                        <Text
+                          style={[
+                            styles.locationOptionText,
+                            isActive && styles.locationOptionTextActive,
+                          ]}>
+                          {loc}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <View style={styles.locationButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.locationButton, styles.locationButtonSecondary]}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setTempSpecialty(selectedSpecialty);
+                      setTempLocation(selectedLocation);
+                      setWizardStep(1);
+                      setIsWizardVisible(false);
+                    }}>
+                    <Text style={styles.locationButtonSecondaryText}>Anuluj</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.locationButton, styles.locationButtonPrimary]}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      setSelectedSpecialty(tempSpecialty);
+                      setSelectedLocation(tempLocation);
+                      setWizardStep(1);
+                      setIsWizardVisible(false);
+                    }}>
+                    <Text style={styles.locationButtonPrimaryText}>Zatwierdź</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -728,6 +911,11 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: 8,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -742,6 +930,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+
+  wizardSummary: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    width: 110,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
   },
 
   doctorCard: {
@@ -930,6 +1141,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  calendarDayInnerAvailable: {
+    backgroundColor: '#BBF7D0', // jasna zieleń
+  },
+  calendarDayInnerUnavailable: {
+    backgroundColor: '#E5E7EB', // jasna szarość
+  },
   calendarDayInnerSelected: {
     backgroundColor: COLORS.primary,
   },
@@ -1010,6 +1227,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+
+  wizardStepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
 
   // Success screen

@@ -1,8 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -35,6 +38,55 @@ const COLORS = {
 };
 
 export default function DashboardScreen() {
+  const [isPhoneModalVisible, setIsPhoneModalVisible] = useState(false);
+  const [isCriticalPending, setIsCriticalPending] = useState(false);
+  const [isCriticalModalVisible, setIsCriticalModalVisible] = useState(false);
+  const [isCriticalCancelledVisible, setIsCriticalCancelledVisible] = useState(false);
+  const [isCriticalConfirmVisible, setIsCriticalConfirmVisible] = useState(false);
+
+  const params = useLocalSearchParams();
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  const criticalFlag = Array.isArray(params.criticalTriage)
+    ? params.criticalTriage[0]
+    : params.criticalTriage;
+
+  useEffect(() => {
+    if (criticalFlag === 'true') {
+      setIsCriticalPending(true);
+      setIsCriticalConfirmVisible(true);
+    }
+  }, [criticalFlag]);
+
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | undefined;
+
+    if (isCriticalPending) {
+      animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(fadeAnim, {
+            toValue: 0.5,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      animation.start();
+    } else {
+      fadeAnim.setValue(1);
+    }
+
+    return () => {
+      if (animation) {
+        animation.stop();
+      }
+    };
+  }, [isCriticalPending, fadeAnim]);
   const handleTriagePress = () => {
     router.push('/triage' as never);
   };
@@ -76,6 +128,34 @@ export default function DashboardScreen() {
 
         {/* ── HERO ACTIONS: PRIMARY & SECONDARY CTA ── */}
         <View style={styles.heroSection}>
+          {isCriticalPending && (
+            <View style={{ marginBottom: 12 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#EF4444',
+                  padding: 16,
+                  borderRadius: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+                onPress={() => setIsCriticalModalVisible(true)}
+                activeOpacity={0.9}>
+                <Animated.View style={{ opacity: fadeAnim }}>
+                  <Ionicons name="alert-circle" size={26} color="#FFFFFF" />
+                </Animated.View>
+                <Text
+                  style={{
+                    color: '#FFFFFF',
+                    fontWeight: '700',
+                    marginLeft: 12,
+                    flex: 1,
+                  }}>
+                  Pilne zgłoszenie wysłane. Oczekuj na telefon.
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Primary CTA */}
           <Pressable
             style={({ pressed }) => [styles.heroPrimaryCard, pressed && styles.heroPrimaryPressed]}
@@ -130,7 +210,7 @@ export default function DashboardScreen() {
           {/* 1. Zadzwoń */}
           <TouchableOpacity
             style={[styles.quickCard, styles.quickCardOrange]}
-            onPress={() => handleQuickAction('Zadzwoń do przychodni')}
+            onPress={() => setIsPhoneModalVisible(true)}
             accessibilityLabel="Zadzwoń do przychodni"
             accessibilityRole="button"
             activeOpacity={0.8}>
@@ -160,7 +240,7 @@ export default function DashboardScreen() {
           {/* 3. Moje wizyty */}
           <TouchableOpacity
             style={[styles.quickCard, styles.quickCardBlue]}
-            onPress={() => handleQuickAction('Moje wizyty')}
+            onPress={() => router.push('/my-visits' as never)}
             accessibilityLabel="Moje wizyty"
             accessibilityRole="button"
             activeOpacity={0.8}>
@@ -219,6 +299,153 @@ export default function DashboardScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <Modal visible={isPhoneModalVisible} transparent animationType="fade">
+        <View style={styles.phoneModalOverlay}>
+          <View style={styles.phoneModalCard}>
+            <Text style={styles.phoneModalTitle}>Skontaktuj się z nami</Text>
+
+            <TouchableOpacity
+              style={styles.phoneModalRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                Linking.openURL('tel:587285800');
+                setIsPhoneModalVisible(false);
+              }}>
+              <View style={styles.phoneModalRowLeft}>
+                <Ionicons name="call-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.phoneModalRowLabel}>Główna Infolinia</Text>
+              </View>
+              <Text style={styles.phoneModalRowRightText}>58 728 58 00</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.phoneModalRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                Linking.openURL('tel:585303077');
+                setIsPhoneModalVisible(false);
+              }}>
+              <View style={styles.phoneModalRowLeft}>
+                <Ionicons name="call-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.phoneModalRowLabel}>Rej. 30-go Stycznia</Text>
+              </View>
+              <Text style={styles.phoneModalRowRightText}>58 530 30 77</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.phoneModalRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                Linking.openURL('tel:585303071');
+                setIsPhoneModalVisible(false);
+              }}>
+              <View style={styles.phoneModalRowLeft}>
+                <Ionicons name="call-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.phoneModalRowLabel}>Rej. Jasia i Małgosi</Text>
+              </View>
+              <Text style={styles.phoneModalRowRightText}>58 530 30 71</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.phoneModalCancel}
+              activeOpacity={0.7}
+              onPress={() => setIsPhoneModalVisible(false)}>
+              <Text style={styles.phoneModalCancelText}>Anuluj</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isCriticalModalVisible} transparent animationType="slide">
+        <View style={styles.criticalModalOverlay}>
+          <View style={styles.criticalModalCard}>
+            <View style={styles.criticalIconWrapper}>
+              <Ionicons name="alert-circle" size={52} color="#EF4444" />
+            </View>
+            <Text style={styles.criticalTitle}>Przychodnia otrzymała Twoje zgłoszenie</Text>
+            <Text style={styles.criticalText}>
+              Zgłosiłeś silny ból i złe samopoczucie. Nasz personel medyczny analizuje Twoją
+              sytuację. Skontaktujemy się z Tobą telefonicznie w ciągu kilkunastu minut. Prosimy
+              nie blokować linii.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.criticalCancelButton}
+              activeOpacity={0.9}
+              onPress={() => {
+                Alert.alert(
+                  'Odwołanie zgłoszenia',
+                  'Czy na pewno chcesz odwołać pilne zgłoszenie?',
+                  [
+                    { text: 'Nie', style: 'cancel' },
+                    {
+                      text: 'Tak, odwołaj',
+                      style: 'destructive',
+                      onPress: () => {
+                        setIsCriticalModalVisible(false);
+                        setIsCriticalPending(false);
+                        setIsCriticalCancelledVisible(true);
+                      },
+                    },
+                  ],
+                );
+              }}>
+              <Text style={styles.criticalCancelButtonText}>Odwołaj zgłoszenie</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.criticalCloseButton}
+              activeOpacity={0.7}
+              onPress={() => setIsCriticalModalVisible(false)}>
+              <Text style={styles.criticalCloseButtonText}>Zamknij okno</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isCriticalConfirmVisible} transparent animationType="fade">
+        <View style={styles.criticalModalOverlay}>
+          <View style={styles.criticalModalCard}>
+            <View style={styles.criticalIconWrapper}>
+              <Ionicons name="alert-circle" size={52} color="#EF4444" />
+            </View>
+            <Text style={styles.criticalTitle}>Przychodnia otrzymała Twoje zgłoszenie</Text>
+            <Text style={styles.criticalText}>
+              Zgłosiłeś silny ból i złe samopoczucie. Nasz personel medyczny analizuje Twoją
+              sytuację. Skontaktujemy się z Tobą telefonicznie w ciągu kilkunastu minut. Prosimy
+              nie blokować linii.
+            </Text>
+            <TouchableOpacity
+              style={styles.criticalCancelButton}
+              activeOpacity={0.9}
+              onPress={() => setIsCriticalConfirmVisible(false)}>
+              <Text style={styles.criticalCancelButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isCriticalCancelledVisible} transparent animationType="fade">
+        <View style={styles.criticalModalOverlay}>
+          <View style={styles.criticalModalCard}>
+            <View style={styles.criticalIconWrapper}>
+              <Ionicons name="checkmark-circle" size={52} color="#16A34A" />
+            </View>
+            <Text style={styles.criticalTitle}>Zgłoszenie zostało odwołane</Text>
+            <Text style={styles.criticalText}>
+              Twoje pilne zgłoszenie zostało skutecznie odwołane. Jeśli sytuacja się pogorszy,
+              ponownie skontaktuj się z przychodnią lub zadzwoń na numer alarmowy 112.
+            </Text>
+            <TouchableOpacity
+              style={styles.criticalCancelButton}
+              activeOpacity={0.9}
+              onPress={() => setIsCriticalCancelledVisible(false)}>
+              <Text style={styles.criticalCancelButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -498,5 +725,113 @@ const styles = StyleSheet.create({
 
   bottomSpacer: {
     height: 32,
+  },
+
+  phoneModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  phoneModalCard: {
+    width: '90%',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 20,
+  },
+  phoneModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  phoneModalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  phoneModalRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  phoneModalRowLabel: {
+    marginLeft: 8,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+  },
+  phoneModalRowRightText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  phoneModalCancel: {
+    marginTop: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  phoneModalCancelText: {
+    fontSize: 15,
+    color: COLORS.textMuted,
+  },
+
+  criticalModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  criticalModalCard: {
+    width: '90%',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 20,
+  },
+  criticalIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  criticalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  criticalText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  criticalCancelButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  criticalCancelButtonText: {
+    color: '#EF4444',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  criticalCloseButton: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  criticalCloseButtonText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
   },
 });

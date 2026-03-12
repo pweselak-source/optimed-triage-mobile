@@ -51,6 +51,14 @@ export default function TriageScreen() {
   };
 
   const handleFastTrackSubmit = () => {
+    if (selectedPath === 'urgent') {
+      router.replace({
+        pathname: '/',
+        params: { criticalTriage: 'true' },
+      });
+      return;
+    }
+
     if (selectedPath === 'prescription' && !prescriptionText.trim()) {
       Alert.alert('Uzupełnij informacje', 'Opisz proszę leki i dawkowanie przed wysłaniem prośby.');
       return;
@@ -78,25 +86,7 @@ export default function TriageScreen() {
           </Text>
 
           <View style={styles.cardsColumn}>
-            <TouchableOpacity
-              style={[styles.optionCard, styles.optionCardBlue]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedPath('prescription');
-                setStep(2);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Przedłużenie e-Recepty. Stale przyjmowane leki.">
-              <View style={styles.optionIconCircle}>
-                <Ionicons name="medkit-outline" size={32} color={COLORS.primary} />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Przedłużenie e-Recepty</Text>
-                <Text style={styles.optionSubtitle}>Stale przyjmowane leki</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-
+            {/* Opcja 1 – Krytyczna */}
             <TouchableOpacity
               style={[styles.optionCard, styles.optionCardRed]}
               activeOpacity={0.9}
@@ -110,12 +100,13 @@ export default function TriageScreen() {
                 <Ionicons name="warning-outline" size={32} color={COLORS.danger} />
               </View>
               <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Silny ból / Złe samopoczucie</Text>
+                <Text style={styles.optionTitle}>Silny ból, złe samopoczucie</Text>
                 <Text style={styles.optionSubtitle}>Wymaga pilnego kontaktu</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color={COLORS.danger} />
             </TouchableOpacity>
 
+            {/* Opcja 2 – Zwykła wizyta */}
             <TouchableOpacity
               style={[styles.optionCard, styles.optionCardGreen]}
               activeOpacity={0.9}
@@ -124,15 +115,35 @@ export default function TriageScreen() {
                 setStep(3);
               }}
               accessibilityRole="button"
-              accessibilityLabel="Zwykła wizyta lub inny problem. Inteligentna ankieta.">
+              accessibilityLabel="Zwykła wizyta do lekarza lub inny problem.">
               <View style={[styles.optionIconCircle, { backgroundColor: COLORS.successLight }]}>
                 <Ionicons name="calendar-outline" size={32} color={COLORS.success} />
               </View>
               <View style={styles.optionTextContainer}>
                 <Text style={styles.optionTitle}>Zwykła wizyta</Text>
-                <Text style={styles.optionSubtitle}>Inny problem – krótka ankieta</Text>
+                <Text style={styles.optionSubtitle}>Standardowa wizyta do lekarza</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color={COLORS.success} />
+            </TouchableOpacity>
+
+            {/* Opcja 3 – Recepta */}
+            <TouchableOpacity
+              style={[styles.optionCard, styles.optionCardBlue]}
+              activeOpacity={0.9}
+              onPress={() => {
+                setSelectedPath('prescription');
+                setStep(2);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Przedłużenie recepty na stale przyjmowane leki.">
+              <View style={styles.optionIconCircle}>
+                <Ionicons name="medkit-outline" size={32} color={COLORS.primary} />
+              </View>
+              <View style={styles.optionTextContainer}>
+                <Text style={styles.optionTitle}>Przedłużenie recepty</Text>
+                <Text style={styles.optionSubtitle}>Stale przyjmowane leki</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
         </View>
