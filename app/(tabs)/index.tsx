@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
 import {
@@ -12,19 +12,20 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
-
-const PATIENT_NAME = 'Janie';
 
 const COLORS = {
   background: '#F0F4F8',
-  primary: '#1A6FBF',
-  primaryDark: '#155EA0',
-  primaryLight: '#EBF3FC',
+  primary: '#2F4F9F',       // jasny granatowy
+  primaryDark: '#243B7A',
+  primaryLight: '#DBEAFE',
   accent: '#E8F5E9',
   accentGreen: '#2E7D32',
   accentPurple: '#4A148C',
   accentPurpleLight: '#F3E5F5',
+  accentBlueLight: '#DBEAFE',
+  accentOrangeLight: '#FFF4E5',
   white: '#FFFFFF',
   textPrimary: '#1A2B3C',
   textSecondary: '#4A5568',
@@ -51,82 +52,139 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}>
 
         {/* ── HEADER ── */}
-        <View style={styles.header}>
-          <View style={styles.headerTextGroup}>
-            <Text style={styles.headerGreeting}>Dzień dobry,</Text>
-            <Text style={styles.headerName}>{PATIENT_NAME} 👋</Text>
+        <View style={styles.headerContainer}>
+          {/* Lewa strona – logo kliniki */}
+          <View style={styles.headerLeft}>
+            <Image
+              source={require('../../assets/images/KlinikaRogLogo.png')}
+              style={styles.logoImage}
+            />
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => handleQuickAction('Profil pacjenta')}
-            accessibilityLabel="Profil pacjenta"
+
+          {/* Prawa strona – zalogowany pacjent */}
+          <View style={styles.headerRight}>
+            <Text style={styles.headerRightLabel}>Zalogowany jako</Text>
+            <Text style={styles.headerRightName}>Jan Kowalski</Text>
+            <Ionicons
+              name="person-circle-outline"
+              size={20}
+              color="#9CA3AF"
+              style={styles.headerRightIcon}
+            />
+          </View>
+        </View>
+
+        {/* ── HERO ACTIONS: PRIMARY & SECONDARY CTA ── */}
+        <View style={styles.heroSection}>
+          {/* Primary CTA */}
+          <Pressable
+            style={({ pressed }) => [styles.heroPrimaryCard, pressed && styles.heroPrimaryPressed]}
+            onPress={handleTriagePress}
+            accessibilityLabel="Zgłoś problem – przejdź do szybkiej ankiety"
             accessibilityRole="button">
-            <Ionicons name="person-circle-outline" size={48} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
+            <View style={styles.heroIconWrapperPrimary}>
+              <Ionicons name="medkit-outline" size={32} color={COLORS.white} />
+            </View>
+            <View style={styles.heroTextGroup}>
+              <Text style={styles.heroTitlePrimary}>Zgłoś problem</Text>
+              <Text style={styles.heroSubtitlePrimary}>Błyskawiczna ankieta</Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={26}
+              color="rgba(255,255,255,0.85)"
+              style={styles.heroChevron}
+            />
+          </Pressable>
 
-        {/* ── INFO BADGE ── */}
-        <View style={styles.infoBadge}>
-          <Ionicons name="information-circle" size={18} color={COLORS.primary} />
-          <Text style={styles.infoBadgeText}>
-            Twoja kolejna wizyta: <Text style={styles.infoBadgeBold}>Brak zaplanowanych</Text>
-          </Text>
+          {/* Secondary CTA */}
+          <Pressable
+            style={({ pressed }) => [styles.heroSecondaryCard, pressed && styles.heroSecondaryPressed]}
+            onPress={() => router.push('/booking' as never)}
+            accessibilityLabel="Umów wizytę – wybierz termin z kalendarza"
+            accessibilityRole="button">
+            <View style={styles.heroIconWrapperSecondary}>
+              <Ionicons name="calendar-outline" size={30} color={COLORS.primary} />
+              <View style={styles.heroIconBadge}>
+                <Ionicons name="add" size={14} color={COLORS.primary} />
+              </View>
+            </View>
+            <View style={styles.heroTextGroup}>
+              <Text style={styles.heroTitleSecondary}>Umów wizytę</Text>
+              <Text style={styles.heroSubtitleSecondary}>Wybierz termin z kalendarza</Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={22}
+              color={COLORS.primary}
+              style={styles.heroChevron}
+            />
+          </Pressable>
         </View>
-
-        {/* ── HERO ACTION ── */}
-        <Pressable
-          style={({ pressed }) => [styles.heroCard, pressed && styles.heroCardPressed]}
-          onPress={handleTriagePress}
-          accessibilityLabel="Zgłoś problem lub zamów receptę – wejście do Triage"
-          accessibilityRole="button">
-          <View style={styles.heroIconWrapper}>
-            <Ionicons name="medkit" size={40} color={COLORS.white} />
-          </View>
-          <View style={styles.heroTextGroup}>
-            <Text style={styles.heroTitle}>Zgłoś problem</Text>
-            <Text style={styles.heroSubtitle}>Zamów receptę / Triage</Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={28}
-            color="rgba(255,255,255,0.7)"
-            style={styles.heroChevron}
-          />
-        </Pressable>
 
         {/* ── SECTION LABEL ── */}
         <Text style={styles.sectionLabel}>Na skróty</Text>
 
         {/* ── QUICK ACTIONS GRID ── */}
         <View style={styles.quickGrid}>
+          {/* 1. Zadzwoń */}
+          <TouchableOpacity
+            style={[styles.quickCard, styles.quickCardOrange]}
+            onPress={() => handleQuickAction('Zadzwoń do przychodni')}
+            accessibilityLabel="Zadzwoń do przychodni"
+            accessibilityRole="button"
+            activeOpacity={0.8}>
+            <View style={styles.quickIconWrapper}>
+              <Ionicons name="call" size={30} color="#2563EB" />
+            </View>
+            <Text style={styles.quickCardTitle}>
+              Zadzwoń
+            </Text>
+          </TouchableOpacity>
+
+          {/* 2. Moje e-Recepty */}
           <TouchableOpacity
             style={[styles.quickCard, styles.quickCardGreen]}
             onPress={() => handleQuickAction('Moje e-Recepty')}
             accessibilityLabel="Moje e-Recepty"
             accessibilityRole="button"
             activeOpacity={0.8}>
-            <View style={[styles.quickIconWrapper, { backgroundColor: '#C8E6C9' }]}>
-              <Ionicons name="document-text" size={30} color={COLORS.accentGreen} />
+            <View style={styles.quickIconWrapper}>
+              <Ionicons name="document-text-outline" size={28} color="#2563EB" />
             </View>
-            <Text style={[styles.quickCardTitle, { color: COLORS.accentGreen }]}>
-              Moje{'\n'}e-Recepty
+            <Text style={styles.quickCardTitle}>
+              Moje e-Recepty
             </Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.accentGreen} style={styles.quickChevron} />
           </TouchableOpacity>
 
+          {/* 3. Moje wizyty */}
+          <TouchableOpacity
+            style={[styles.quickCard, styles.quickCardBlue]}
+            onPress={() => handleQuickAction('Moje wizyty')}
+            accessibilityLabel="Moje wizyty"
+            accessibilityRole="button"
+            activeOpacity={0.8}>
+            <View style={styles.quickIconWrapper}>
+              <Ionicons name="calendar-outline" size={28} color="#2563EB" />
+            </View>
+            <Text style={styles.quickCardTitle}>
+              Moje wizyty
+            </Text>
+          </TouchableOpacity>
+
+          {/* 4. Historia leczenia */}
           <TouchableOpacity
             style={[styles.quickCard, styles.quickCardPurple]}
             onPress={() => handleQuickAction('Historia leczenia')}
             accessibilityLabel="Historia leczenia"
             accessibilityRole="button"
             activeOpacity={0.8}>
-            <View style={[styles.quickIconWrapper, { backgroundColor: '#E1BEE7' }]}>
-              <Ionicons name="time" size={30} color={COLORS.accentPurple} />
+            <View style={styles.quickIconWrapper}>
+              <Ionicons name="time-outline" size={28} color="#2563EB" />
             </View>
-            <Text style={[styles.quickCardTitle, { color: COLORS.accentPurple }]}>
-              Historia{'\n'}leczenia
+            <Text style={styles.quickCardTitle}>
+              Historia leczenia
             </Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.accentPurple} style={styles.quickChevron} />
           </TouchableOpacity>
         </View>
 
@@ -135,9 +193,10 @@ export default function DashboardScreen() {
 
         <View style={styles.listCard}>
           {[
-            { icon: 'calendar-outline' as const, label: 'Umów wizytę', color: COLORS.primary },
-            { icon: 'chatbubble-ellipses-outline' as const, label: 'Wyniki badań', color: '#D84315' },
-            { icon: 'shield-checkmark-outline' as const, label: 'Ubezpieczenie', color: '#00695C' },
+            { icon: 'document-text-outline' as const, label: 'Wyniki badań (PDF)', color: '#D84315' },
+            { icon: 'pulse-outline' as const, label: 'E-Zwolnienia (L4)', color: '#00695C' },
+            { icon: 'videocam-outline' as const, label: 'Konsultacje Online', color: COLORS.primary },
+            { icon: 'card-outline' as const, label: 'Moje płatności', color: '#92400E' },
           ].map((item, index, arr) => (
             <TouchableOpacity
               key={item.label}
@@ -189,87 +248,155 @@ const styles = StyleSheet.create({
   },
 
   // ── Header ──
-  header: {
+  headerContainer: {
+    backgroundColor: COLORS.white,
+    paddingTop: 40,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginHorizontal: -20,
+    marginBottom: 20,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  headerTextGroup: {
-    flex: 1,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  headerGreeting: {
+  clinicIconWrapper: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  clinicTextGroup: {
+    justifyContent: 'center',
+  },
+  clinicName: {
     fontSize: 18,
-    color: COLORS.textSecondary,
-    fontWeight: '400',
-  },
-  headerName: {
-    fontSize: 28,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: '#111827',
+  },
+  clinicSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
     marginTop: 2,
   },
-  profileButton: {
-    padding: 4,
+  logoImage: {
+    width: 160,
+    height: 45,
+    resizeMode: 'contain',
   },
-
-  // ── Info Badge ──
-  infoBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 24,
-    gap: 8,
+  headerRight: {
+    alignItems: 'flex-end',
   },
-  infoBadgeText: {
+  headerRightLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginBottom: 2,
+  },
+  headerRightName: {
     fontSize: 14,
-    color: COLORS.primary,
-    flex: 1,
+    color: '#374151',
+    marginBottom: 4,
   },
-  infoBadgeBold: {
-    fontWeight: '700',
+  headerRightIcon: {
+    marginTop: 2,
   },
 
-  // ── Hero Card ──
-  heroCard: {
+  // ── Hero Section ──
+  heroSection: {
+    marginBottom: 28,
+  },
+  heroPrimaryCard: {
     backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 28,
-    minHeight: 110,
+    minHeight: 96,
     ...SHADOW,
   },
-  heroCardPressed: {
+  heroPrimaryPressed: {
     backgroundColor: COLORS.primaryDark,
     transform: [{ scale: 0.98 }],
   },
-  heroIconWrapper: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  heroSecondaryCard: {
+    marginTop: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 92,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    ...SHADOW,
+  },
+  heroSecondaryPressed: {
+    backgroundColor: '#EFF6FF',
+  },
+  heroIconWrapperPrimary: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
+  },
+  heroIconWrapperSecondary: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  heroIconBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
   },
   heroTextGroup: {
     flex: 1,
   },
-  heroTitle: {
-    fontSize: 22,
+  heroTitlePrimary: {
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.white,
-    lineHeight: 28,
+    marginBottom: 2,
   },
-  heroSubtitle: {
-    fontSize: 15,
+  heroSubtitlePrimary: {
+    fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
+  },
+  heroTitleSecondary: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 2,
+  },
+  heroSubtitleSecondary: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
   heroChevron: {
     marginLeft: 8,
@@ -286,40 +413,53 @@ const styles = StyleSheet.create({
   // ── Quick Grid ──
   quickGrid: {
     flexDirection: 'row',
-    gap: 14,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     marginBottom: 28,
   },
   quickCard: {
-    flex: 1,
+    width: '48%',
     borderRadius: 18,
-    padding: 18,
-    minHeight: 140,
-    justifyContent: 'space-between',
-    ...SHADOW,
+    padding: 16,
+    minHeight: 120,
+    marginBottom: 16,
+    flexDirection: 'column',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   quickCardGreen: {
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.white,
   },
   quickCardPurple: {
-    backgroundColor: COLORS.accentPurpleLight,
+    backgroundColor: COLORS.white,
+  },
+  quickCardBlue: {
+    backgroundColor: COLORS.white,
+  },
+  quickCardOrange: {
+    backgroundColor: COLORS.white,
   },
   quickIconWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 14,
+    backgroundColor: COLORS.primaryLight,
   },
   quickCardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    lineHeight: 22,
-    flex: 1,
-  },
-  quickChevron: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
+    lineHeight: 21,
+    textAlign: 'center',
   },
 
   // ── List Card ──
