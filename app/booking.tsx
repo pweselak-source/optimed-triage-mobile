@@ -11,7 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 const COLORS = {
   background: '#F0F4F8',
@@ -35,7 +35,6 @@ type Doctor = {
   id: string;
   name: string;
   specialty: string;
-  isPrimary: boolean;
   location: string;
 };
 
@@ -44,42 +43,36 @@ const doctors: Doctor[] = [
     id: 'ewa-nowaczyk-rogowska',
     name: 'lek. Ewa Nowaczyk-Rogowska',
     specialty: 'Internista',
-    isPrimary: true,
     location: 'ul. 30-go Stycznia 55',
   },
   {
     id: 'anna-freza',
     name: 'lek. Anna Freza',
     specialty: 'Internista',
-    isPrimary: false,
     location: 'ul. Jasia i Małgosi 8/4',
   },
   {
     id: 'agnieszka-biedrzycka',
     name: 'lek. Agnieszka Biedrzycka',
     specialty: 'Okulista',
-    isPrimary: false,
     location: 'ul. 30-go Stycznia 55',
   },
   {
     id: 'hanna-pardo',
     name: 'lek. Hanna Pardo',
     specialty: 'Reumatolog',
-    isPrimary: false,
     location: 'ul. Piaskowa 3',
   },
   {
     id: 'tomasz-mazur',
     name: 'lek. Tomasz Mazur',
     specialty: 'Kardiolog',
-    isPrimary: false,
     location: 'ul. Jasia i Małgosi 8/4',
   },
   {
     id: 'jan-kowalski',
     name: 'lek. Jan Kowalski',
     specialty: 'Ortopeda',
-    isPrimary: false,
     location: 'ul. Dąbrowskiego 10',
   },
 ];
@@ -91,7 +84,6 @@ const dateOptions = [
 ];
 
 const SPECIALTIES = [
-  '🌟 Twój lekarz',
   'dowolny specjalista',
   'Internista',
   'Okulista',
@@ -112,6 +104,11 @@ type DateKey = (typeof dateOptions)[number]['key'] | 'custom';
 
 export default function BookingScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ autoAssign?: string; triageUrgent?: string }>();
+  const autoAssignRaw = searchParams.autoAssign;
+  const autoAssignFlag =
+    (Array.isArray(autoAssignRaw) ? autoAssignRaw[0] : autoAssignRaw) === 'true';
+  const isAutoAssign = autoAssignFlag;
 
   const initialToday = new Date();
   initialToday.setHours(0, 0, 0, 0);
@@ -130,8 +127,8 @@ export default function BookingScreen() {
   const [selectedDateKey, setSelectedDateKey] = useState<DateKey>('today');
   const [selectedDateLabel, setSelectedDateLabel] = useState<string>(initialLabel);
   const [selectedDateIso, setSelectedDateIso] = useState<string | null>(initialIso);
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('🌟 Twój lekarz');
-  const [tempSpecialty, setTempSpecialty] = useState<string>('🌟 Twój lekarz');
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('dowolny specjalista');
+  const [tempSpecialty, setTempSpecialty] = useState<string>('dowolny specjalista');
   const [selectedLocation, setSelectedLocation] = useState<(typeof LOCATIONS)[number]>('dowolna placówka w Tczewie');
   const [tempLocation, setTempLocation] = useState<(typeof LOCATIONS)[number]>('dowolna placówka w Tczewie');
   const [selectedBooking, setSelectedBooking] = useState<{
@@ -142,7 +139,7 @@ export default function BookingScreen() {
   const [isCalendarVisible, setIsCalendarVisible] = useState<boolean>(false);
   const [isBookingSuccess, setIsBookingSuccess] = useState<boolean>(false);
   const [isConfirmVisible, setIsConfirmVisible] = useState<boolean>(false);
-  const [isWizardVisible, setIsWizardVisible] = useState<boolean>(true);
+  const [isWizardVisible, setIsWizardVisible] = useState<boolean>(() => !isAutoAssign);
   const [wizardStep, setWizardStep] = useState<number>(1);
 
   const today = useMemo(() => {
@@ -165,29 +162,15 @@ export default function BookingScreen() {
     [today],
   );
 
-  const primaryDoctor = useMemo(
-    () => doctors.find((d) => d.isPrimary),
-    [],
-  );
-
-  const sortedDoctors = useMemo(() => {
-    const primary = doctors.find((d) => d.isPrimary);
-    const others = doctors.filter((d) => !d.isPrimary);
-    return primary ? [primary, ...others] : others;
-  }, []);
+  const sortedDoctors = useMemo(() => [...doctors], []);
 
   const visibleDoctors = useMemo(() => {
     let base = sortedDoctors;
 
-    // Filtr po lokalizacji
     if (selectedLocation !== 'dowolna placówka w Tczewie') {
       base = base.filter((d) => d.location === selectedLocation);
     }
 
-    // Filtr po specjalizacji
-    if (selectedSpecialty === '🌟 Twój lekarz') {
-      return base.filter((d) => d.isPrimary);
-    }
     if (selectedSpecialty === 'dowolny specjalista') {
       return base;
     }
@@ -309,12 +292,6 @@ export default function BookingScreen() {
               <Text style={styles.doctorLocation}>{item.location}</Text>
             )}
           </View>
-          {item.isPrimary && (
-            <View style={styles.primaryPill}>
-              <Ionicons name="star" size={12} color="#FBBF24" />
-              <Text style={styles.primaryPillText}>Twój lekarz</Text>
-            </View>
-          )}
         </View>
 
         <View style={styles.slotsGrid}>
@@ -470,21 +447,25 @@ export default function BookingScreen() {
                 setWizardStep(1);
                 setIsWizardVisible(true);
               }}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Dzień wizyty:</Text>
                   <Text style={styles.infoValue}>{selectedDateLabel}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Specjalista:</Text>
-                  <Text style={styles.infoValue}>
-                    {selectedSpecialty === '🌟 Twój lekarz' ? 'Twój lekarz' : selectedSpecialty}
-                  </Text>
+                  <Text style={styles.infoValue}>{selectedSpecialty}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Placówka:</Text>
                   <Text style={styles.infoValue}>{selectedLocation}</Text>
                 </View>
+                {isAutoAssign ? (
+                  <Text style={styles.autoAssignHint}>
+                    Na start pokazujemy wszystkich lekarzy — dotknij tutaj, aby zawęzić specjalizację
+                    i placówkę.
+                  </Text>
+                ) : null}
               </View>
               <Ionicons name="swap-horizontal-outline" size={20} color="#2563EB" />
             </TouchableOpacity>
@@ -938,6 +919,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  autoAssignHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 10,
+    lineHeight: 18,
+  },
 
   infoRow: {
     flexDirection: 'row',
@@ -996,20 +983,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 2,
-  },
-  primaryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  primaryPillText: {
-    fontSize: 11,
-    color: '#92400E',
-    marginLeft: 4,
-    fontWeight: '600',
   },
 
   slotsGrid: {

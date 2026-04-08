@@ -1,20 +1,54 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
+  Animated,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
-type PathType = 'prescription' | 'urgent' | 'triage' | null;
+type IntroReason = 'nowy_objaw' | 'pogorszenie' | 'admin' | null;
+type MainSymptom =
+  | 'kaszel'
+  | 'goraczka'
+  | 'bol_gardla'
+  | 'katar'
+  | 'dusznosc'
+  | 'bol_klatki'
+  | 'inne'
+  | null;
+type AcuteKey =
+  | 'dusznosc'
+  | 'nie_mowa'
+  | 'bol_klatki'
+  | 'utrata_przytomnosci'
+  | 'udar'
+  | 'krwawienie'
+  | 'obrzęk_gardla'
+  | 'brak';
+type HeavyKey = 'oslabiony' | 'goraczka_zle' | 'splatanie' | 'szybki_oddech' | 'nie';
+type DehydrationKey = 'nie_pije' | 'wymioty' | 'brak_moczu' | 'brak';
+type MentalKey = 'tak' | 'nie' | null;
+type CoughType = 'suchy' | 'mokry' | 'nie_wiem' | null;
+type CoughDuration = 'lt1' | 'd1_3' | 'd4_7' | 'd7plus' | null;
+type FeverLevel = 'brak' | 'lt38' | '38_39' | 'gt39' | null;
+type BreathLevel = 'nie' | 'lekkie' | 'umiarkowane' | 'duze' | null;
+type Sputum = 'brak' | 'jasna' | 'zolta_zielona' | 'krew' | null;
+type ExtraSymptomA = 'bol_gardla' | 'katar' | 'bol_zatok' | 'bol_klatki_oddech';
+type ExtraSymptomB = 'bole_miesni' | 'bol_uszu';
+type ExtraSymptom = ExtraSymptomA | ExtraSymptomB;
+type BotherLevel = 'lekko' | 'umiarkowanie' | 'bardzo' | null;
+type Trend = 'poprawa' | 'bez_zmian' | 'pogorszenie' | 'wax_wane' | null;
+type ChronicKey = 'pluca' | 'serce' | 'cukrzyca' | 'nowotwor' | 'leki_odpornosc' | 'brak';
+
+type OutcomeKey = 'callback_today' | 'three_days' | 'plan_later' | 'symptomatic';
+type ResultVariant = 'urgent' | 'routine' | 'selfcare';
 
 const COLORS = {
   background: '#F5F7FA',
@@ -23,492 +57,884 @@ const COLORS = {
   textSecondary: '#4B5563',
   textMuted: '#6B7280',
   primary: '#2563EB',
-  primaryDark: '#1D4ED8',
+  primarySoft: '#DBEAFE',
   danger: '#DC2626',
-  dangerLight: '#FEE2E2',
+  dangerSoft: '#FEE2E2',
   success: '#16A34A',
-  successLight: '#DCFCE7',
+  successSoft: '#DCFCE7',
   border: '#E5E7EB',
   shadow: '#9CA3AF',
 };
 
+const RESULT_STEP = 20;
+const FIRST_COUGH_STEP = 8;
+const LAST_COUGH_STEP = 17;
+const COUGH_STEP_COUNT = LAST_COUGH_STEP - FIRST_COUGH_STEP + 1;
+
+function buildDoctorSummary(a: Answers, urgencyCount: number): string {
+  const parts: string[] = ['Pacjent – ścieżka kaszel.'];
+  if (a.coughType) {
+    const m: Record<NonNullable<CoughType>, string> = {
+      suchy: 'Kaszel suchy',
+      mokry: 'Kaszel mokry',
+      nie_wiem: 'Typ kaszlu nieokreślony',
+    };
+    parts.push(m[a.coughType] + '.');
+  }
+  if (a.duration) {
+    const m: Record<NonNullable<CoughDuration>, string> = {
+      lt1: 'Kaszel do 1 dnia',
+      d1_3: 'Kaszel 1–3 dni',
+      d4_7: 'Kaszel 4–7 dni',
+      d7plus: 'Kaszel ponad tydzień',
+    };
+    parts.push(m[a.duration] + '.');
+  }
+  if (a.fever) {
+    const m: Record<NonNullable<FeverLevel>, string> = {
+      brak: 'Bez gorączki',
+      lt38: 'Gorączka poniżej 38 °C',
+      '38_39': 'Gorączka 38–39 °C',
+      gt39: 'Gorączka powyżej 39 °C',
+    };
+    parts.push(m[a.fever] + '.');
+  }
+  if (a.breath) {
+    const m: Record<NonNullable<BreathLevel>, string> = {
+      nie: 'Bez trudności w oddychaniu',
+      lekkie: 'Lekka trudność w oddychaniu',
+      umiarkowane: 'Umiarkowana trudność w oddychaniu',
+      duze: 'Znaczna trudność w oddychaniu',
+    };
+    parts.push(m[a.breath] + '.');
+  }
+  if (a.sputum) {
+    const m: Record<NonNullable<Sputum>, string> = {
+      brak: 'Bez odkrztuszania',
+      jasna: 'Odkrztuszana wydzielina jasna',
+      zolta_zielona: 'Żółta/zielona wydzielina',
+      krew: 'Krew w odkrztuszanej wydzielinie',
+    };
+    parts.push(m[a.sputum] + '.');
+  }
+  if (a.extraSymptoms.length) {
+    const labels: Record<ExtraSymptom, string> = {
+      bol_gardla: 'ból gardła',
+      katar: 'katar',
+      bol_zatok: 'ból zatok',
+      bol_klatki_oddech: 'ból w klatce przy oddychaniu',
+      bole_miesni: 'bóle mięśni',
+      bol_uszu: 'ból uszu',
+    };
+    parts.push('Objawy dodatkowe: ' + a.extraSymptoms.map((k) => labels[k]).join(', ') + '.');
+  }
+  if (a.bother) {
+    const m: Record<NonNullable<BotherLevel>, string> = {
+      lekko: 'Utrudnienia lekkie',
+      umiarkowanie: 'Utrudnienia umiarkowane',
+      bardzo: 'Utrudnienia duże',
+    };
+    parts.push(m[a.bother] + '.');
+  }
+  if (a.trend) {
+    const m: Record<NonNullable<Trend>, string> = {
+      poprawa: 'Trend: poprawa',
+      bez_zmian: 'Trend: bez zmian',
+      pogorszenie: 'Trend: pogorszenie',
+      wax_wane: 'Trend: było lepiej, znów gorzej',
+    };
+    parts.push(m[a.trend] + '.');
+  }
+  if (a.chronic?.length) {
+    const disease = a.chronic.filter((c) => c !== 'brak');
+    if (disease.length) {
+      parts.push('Choroby przewlekłe zadeklarowane: ' + disease.join(', ') + '.');
+    } else {
+      parts.push('Bez zadeklarowanych chorób przewlekłych z listy.');
+    }
+  }
+  parts.push('Liczba flag pilności z ankiety: ' + urgencyCount + '.');
+  return parts.join(' ');
+}
+
+function computeUrgencyFromAnswers(a: Answers): number {
+  let n = 0;
+  if (a.heavy && a.heavy !== 'nie') n++;
+  if (a.dehydration && a.dehydration !== 'brak') n++;
+  if (a.mental === 'tak') n++;
+  if (a.breath === 'umiarkowane' || a.breath === 'duze') n++;
+  if (a.sputum === 'krew') n++;
+  if (a.bother === 'bardzo') n++;
+  if (a.trend === 'pogorszenie' || a.trend === 'wax_wane') n++;
+  if (a.chronic.some((c) => c !== 'brak')) n++;
+  return n;
+}
+
+type Answers = {
+  introReason: IntroReason;
+  mainSymptom: MainSymptom;
+  acute: AcuteKey | null;
+  heavy: HeavyKey | null;
+  dehydration: DehydrationKey | null;
+  mental: MentalKey;
+  coughType: CoughType;
+  duration: CoughDuration;
+  fever: FeverLevel;
+  breath: BreathLevel;
+  sputum: Sputum;
+  extraSymptoms: ExtraSymptom[];
+  bother: BotherLevel;
+  trend: Trend;
+  chronic: ChronicKey[];
+};
+
+const emptyAnswers = (): Answers => ({
+  introReason: null,
+  mainSymptom: null,
+  acute: null,
+  heavy: null,
+  dehydration: null,
+  mental: null,
+  coughType: null,
+  duration: null,
+  fever: null,
+  breath: null,
+  sputum: null,
+  extraSymptoms: [],
+  bother: null,
+  trend: null,
+  chronic: [],
+});
+
+function computeOutcome(flags: number, duration: CoughDuration, trend: Trend): OutcomeKey {
+  if (flags >= 2) return 'callback_today';
+  const longCough = duration === 'd4_7' || duration === 'd7plus';
+  if (flags === 1 || longCough) return 'three_days';
+  if (flags === 0 && trend !== null && trend !== 'poprawa') return 'plan_later';
+  if ((duration === 'lt1' || duration === 'd1_3') && trend === 'poprawa') return 'symptomatic';
+  return 'plan_later';
+}
+
+function outcomeToVariant(o: OutcomeKey): ResultVariant {
+  if (o === 'callback_today' || o === 'three_days') return 'urgent';
+  if (o === 'plan_later') return 'routine';
+  return 'selfcare';
+}
+
+function KillSwitchScreen({ onRestart }: { onRestart: () => void }) {
+  const pulse = useRef(new Animated.Value(0.7)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 2400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.7,
+          duration: 2400,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  const mockDial = (num: string) => {
+    Alert.alert(num, 'Symulacja nawiązywania połączenia...', [{ text: 'OK' }]);
+  };
+
+  return (
+    <View style={killStyles.root}>
+      <Animated.View style={[killStyles.pulseLayer, { opacity: pulse }]} />
+      <SafeAreaView style={killStyles.safe}>
+        <ScrollView
+          contentContainerStyle={killStyles.scrollInner}
+          showsVerticalScrollIndicator={false}>
+          <Ionicons name="warning" size={72} color="#FEF2F2" style={{ alignSelf: 'center' }} />
+          <Text style={killStyles.killTitle}>Możliwe zagrożenie życia</Text>
+          <Text style={killStyles.killLead}>
+            Nie zwlekaj — wezwij pomoc medyczną lub poproś kogoś w pobliżu, aby zadzwonił za Ciebie.
+          </Text>
+          <Pressable
+            style={killStyles.dialBtn}
+            onPress={() => mockDial('112')}
+            accessibilityRole="button"
+            accessibilityLabel="Zadzwoń na 112">
+            <Ionicons name="call" size={28} color="#FFF" />
+            <Text style={killStyles.dialBtnText}>Zadzwoń na 112</Text>
+          </Pressable>
+          <Pressable
+            style={killStyles.dialBtn}
+            onPress={() => mockDial('999')}
+            accessibilityRole="button"
+            accessibilityLabel="Zadzwoń na 999">
+            <Ionicons name="call" size={28} color="#FFF" />
+            <Text style={killStyles.dialBtnText}>Zadzwoń na 999</Text>
+          </Pressable>
+          <Pressable style={killStyles.restartBtn} onPress={onRestart} accessibilityRole="button">
+            <Text style={killStyles.restartText}>Od początku ankiety</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const killStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#7F1D1D',
+  },
+  pulseLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#DC2626',
+  },
+  safe: {
+    flex: 1,
+    zIndex: 1,
+  },
+  scrollInner: {
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 40,
+    gap: 20,
+  },
+  killTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFBEB',
+    textAlign: 'center',
+    lineHeight: 34,
+    marginTop: 8,
+  },
+  killLead: {
+    fontSize: 17,
+    color: '#FEE2E2',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 8,
+  },
+  dialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 18,
+    paddingVertical: 22,
+    minHeight: 72,
+  },
+  dialBtnText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  restartBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  restartText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FECACA',
+    textDecorationLine: 'underline',
+  },
+});
+
 export default function TriageScreen() {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
-  const [selectedPath, setSelectedPath] = useState<PathType>(null);
-  const [prescriptionText, setPrescriptionText] = useState('');
-  const [selectedDate, setSelectedDate] = useState<'today' | 'tomorrow' | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<'infection' | 'results' | 'chronic' | null>(
-    null,
+  const [currentStep, setCurrentStep] = useState(0);
+  const [answers, setAnswers] = useState<Answers>(() => emptyAnswers());
+  const [emergencyExit, setEmergencyExit] = useState(false);
+  const [emergencyReturnStep, setEmergencyReturnStep] = useState(3);
+  const [urgencyFlags, setUrgencyFlags] = useState(0);
+  const [doctorSummary, setDoctorSummary] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<OutcomeKey | null>(null);
+
+  const showProgressBar =
+    currentStep >= FIRST_COUGH_STEP && currentStep <= LAST_COUGH_STEP && !emergencyExit;
+
+  const progressFraction = useMemo(() => {
+    if (!showProgressBar) return 0;
+    return (currentStep - FIRST_COUGH_STEP + 1) / COUGH_STEP_COUNT;
+  }, [currentStep, showProgressBar]);
+
+  const goNext = (next: number) => setCurrentStep(next);
+
+  const openEmergency = (acuteKey: AcuteKey, returnTo: 3 | 4) => {
+    setAnswers((a) => ({ ...a, acute: acuteKey }));
+    setEmergencyReturnStep(returnTo);
+    setEmergencyExit(true);
+  };
+
+  const finishFlow = (finalAnswers: Answers) => {
+    const flags = computeUrgencyFromAnswers(finalAnswers);
+    setUrgencyFlags(flags);
+    const oc = computeOutcome(flags, finalAnswers.duration, finalAnswers.trend);
+    setOutcome(oc);
+    setDoctorSummary(buildDoctorSummary(finalAnswers, flags));
+    setCurrentStep(RESULT_STEP);
+  };
+
+  const navigateToAutoAssign = (urgent: boolean) => {
+    console.log('Nawigacja do kalendarza - ominięcie wyboru placówki/lekarza', { urgent });
+    router.push({
+      pathname: '/booking',
+      params: { autoAssign: 'true', triageUrgent: urgent ? 'true' : 'false' },
+    } as never);
+  };
+
+  const exitTriageHome = () => {
+    router.replace('/' as never);
+  };
+
+  const handleBack = () => {
+    if (emergencyExit) {
+      setEmergencyExit(false);
+      setCurrentStep(emergencyReturnStep);
+      return;
+    }
+    if (currentStep === RESULT_STEP) {
+      setOutcome(null);
+      setDoctorSummary(null);
+      setUrgencyFlags(0);
+      setAnswers(emptyAnswers());
+      setCurrentStep(0);
+      return;
+    }
+    if (currentStep <= 0) {
+      router.back();
+      return;
+    }
+    setCurrentStep((s) => s - 1);
+  };
+
+  const renderChoiceButton = (
+    label: string,
+    onPress: () => void,
+    opts?: { disabled?: boolean; danger?: boolean },
+  ) => (
+    <Pressable
+      onPress={opts?.disabled ? undefined : onPress}
+      style={({ pressed }) => [
+        styles.choiceBtn,
+        opts?.disabled && styles.choiceBtnDisabled,
+        opts?.danger && styles.choiceBtnDanger,
+        !opts?.disabled && pressed && styles.choiceBtnPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!opts?.disabled }}>
+      <Text
+        style={[
+          styles.choiceBtnText,
+          opts?.disabled && styles.choiceBtnTextDisabled,
+          opts?.danger && styles.choiceBtnTextLight,
+        ]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 
-  const resetToStep1 = () => {
-    setStep(1);
-    setSelectedPath(null);
-    setPrescriptionText('');
-    setSelectedDate(null);
-    setSelectedCategory(null);
+  const renderProgress = () =>
+    showProgressBar ? (
+      <View style={styles.progressWrap}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${Math.round(progressFraction * 100)}%` }]} />
+        </View>
+      </View>
+    ) : null;
+
+  const renderTopBar = () => (
+    <View style={styles.topBar}>
+      <Pressable onPress={handleBack} style={styles.backBtn} accessibilityRole="button">
+        <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        <Text style={styles.backBtnText}>Wstecz</Text>
+      </Pressable>
+    </View>
+  );
+
+  const toggleExtraA = (key: ExtraSymptomA) => {
+    setAnswers((a) => {
+      const next = [...a.extraSymptoms];
+      const i = next.indexOf(key);
+      if (i >= 0) next.splice(i, 1);
+      else next.push(key);
+      return { ...a, extraSymptoms: next as ExtraSymptom[] };
+    });
   };
 
-  const handleFastTrackSubmit = () => {
-    if (selectedPath === 'urgent') {
-      router.replace({
-        pathname: '/',
-        params: { criticalTriage: 'true' },
-      });
-      return;
-    }
-
-    if (selectedPath === 'prescription' && !prescriptionText.trim()) {
-      Alert.alert('Uzupełnij informacje', 'Opisz proszę leki i dawkowanie przed wysłaniem prośby.');
-      return;
-    }
-
-    setStep(6);
+  const toggleExtraB = (key: ExtraSymptomB) => {
+    setAnswers((a) => {
+      const next = [...a.extraSymptoms];
+      const i = next.indexOf(key);
+      if (i >= 0) next.splice(i, 1);
+      else next.push(key);
+      return { ...a, extraSymptoms: next as ExtraSymptom[] };
+    });
   };
 
-  const handleConfirmReservation = () => {
-    if (!selectedDate) {
-      Alert.alert('Wybierz termin', 'Zaznacz preferowany termin wizyty.');
-      return;
-    }
-    setStep(6);
-  };
+  const renderResults = () => {
+    if (currentStep !== RESULT_STEP || !outcome || !doctorSummary) return null;
+    const variant = outcomeToVariant(outcome);
 
-  const renderStepContent = () => {
-    if (step === 1) {
+    const summaryBlock = (
+      <>
+        <Text style={styles.summaryLabel}>
+          Podsumowanie dla lekarza · pilność: {urgencyFlags}
+        </Text>
+        <View style={styles.summaryBox}>
+          <Text style={styles.summaryText}>{doctorSummary}</Text>
+        </View>
+      </>
+    );
+
+    if (variant === 'urgent') {
       return (
-        <View style={styles.content}>
-          <Text style={styles.header}>W czym możemy Ci dzisiaj pomóc?</Text>
-
-          <Text style={styles.subheader}>
-            Wybierz jedną z opcji poniżej. Zawsze możesz wrócić i zmienić wybór.
+        <View style={styles.block}>
+          <Text style={styles.resultHeadline}>Twoje objawy wymagają szybkiej konsultacji</Text>
+          <Text style={styles.resultSub}>
+            Umów się możliwie szybko z lekarzem — przygotujemy dla Ciebie termin priorytetowy.
           </Text>
-
-          <View style={styles.cardsColumn}>
-            {/* Opcja 1 – Krytyczna */}
-            <TouchableOpacity
-              style={[styles.optionCard, styles.optionCardRed]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedPath('urgent');
-                setStep(2);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Silny ból lub złe samopoczucie. Wymaga pilnego kontaktu.">
-              <View style={[styles.optionIconCircle, { backgroundColor: COLORS.dangerLight }]}>
-                <Ionicons name="warning-outline" size={32} color={COLORS.danger} />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Silny ból, złe samopoczucie</Text>
-                <Text style={styles.optionSubtitle}>Wymaga pilnego kontaktu</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color={COLORS.danger} />
-            </TouchableOpacity>
-
-            {/* Opcja 2 – Zwykła wizyta */}
-            <TouchableOpacity
-              style={[styles.optionCard, styles.optionCardGreen]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedPath('triage');
-                setStep(3);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Zwykła wizyta do lekarza lub inny problem.">
-              <View style={[styles.optionIconCircle, { backgroundColor: COLORS.successLight }]}>
-                <Ionicons name="calendar-outline" size={32} color={COLORS.success} />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Zwykła wizyta</Text>
-                <Text style={styles.optionSubtitle}>Standardowa wizyta do lekarza</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color={COLORS.success} />
-            </TouchableOpacity>
-
-            {/* Opcja 3 – Recepta */}
-            <TouchableOpacity
-              style={[styles.optionCard, styles.optionCardBlue]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedPath('prescription');
-                setStep(2);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Przedłużenie recepty na stale przyjmowane leki.">
-              <View style={styles.optionIconCircle}>
-                <Ionicons name="medkit-outline" size={32} color={COLORS.primary} />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Przedłużenie recepty</Text>
-                <Text style={styles.optionSubtitle}>Stale przyjmowane leki</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
+          <Pressable
+            style={styles.ctaDoctor}
+            onPress={() => navigateToAutoAssign(true)}
+            accessibilityRole="button">
+            <Ionicons name="medkit" size={26} color="#FFF" />
+            <Text style={styles.ctaDoctorText}>Umów termin pilny</Text>
+          </Pressable>
+          {summaryBlock}
+          <Pressable style={styles.textLinkBtn} onPress={exitTriageHome}>
+            <Text style={styles.textLink}>Wróć na stronę główną</Text>
+          </Pressable>
         </View>
       );
     }
 
-    if (step === 2) {
+    if (variant === 'routine') {
       return (
-        <View style={styles.content}>
-          <View style={styles.topBar}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={resetToStep1}
-              accessibilityRole="button"
-              accessibilityLabel="Wróć do wyboru problemu">
-              <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
-              <Text style={styles.backButtonText}>Wstecz</Text>
-            </TouchableOpacity>
-          </View>
-
-          {selectedPath === 'prescription' && (
-            <>
-              <Text style={styles.header}>Zamówienie e-Recepty</Text>
-              <Text style={styles.subheader}>
-                Podaj nazwy swoich leków, dawki oraz jak często je przyjmujesz. Nie wpisuj danych karty
-                płatniczej ani numeru PIN.
-              </Text>
-
-              <View style={styles.card}>
-                <TextInput
-                  style={styles.textArea}
-                  multiline
-                  textAlignVertical="top"
-                  placeholder="Wpisz nazwy leków i dawkowanie..."
-                  placeholderTextColor={COLORS.textMuted}
-                  value={prescriptionText}
-                  onChangeText={setPrescriptionText}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.primaryButtonFull]}
-                activeOpacity={0.9}
-                onPress={handleFastTrackSubmit}
-                accessibilityRole="button"
-                accessibilityLabel="Wyślij prośbę o przedłużenie recepty do lekarza">
-                <Text style={styles.primaryButtonText}>Wyślij prośbę do lekarza</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {selectedPath === 'urgent' && (
-            <>
-              <View style={[styles.card, styles.urgentBanner]}>
-                <View style={styles.urgentIconWrapper}>
-                  <Ionicons name="warning" size={36} color={COLORS.danger} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.urgentTitle}>UWAGA!</Text>
-                  <Text style={styles.urgentText}>
-                    Jeśli podejrzewasz zawał, udar, masz duszności lub krwotok –{' '}
-                    <Text style={styles.urgentTextBold}>natychmiast dzwoń na numer alarmowy 112!</Text>
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.subheader}>
-                Jeśli sytuacja nie zagraża bezpośrednio życiu, ale wymaga pilnego kontaktu, możesz zgłosić
-                problem do przychodni.
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.primaryButtonDanger]}
-                activeOpacity={0.9}
-                onPress={handleFastTrackSubmit}
-                accessibilityRole="button"
-                accessibilityLabel="Zgłoś pilny problem do przychodni">
-                <Text style={styles.primaryButtonText}>Zgłoś pilny problem do przychodni</Text>
-              </TouchableOpacity>
-            </>
-          )}
+        <View style={styles.block}>
+          <Text style={styles.resultHeadline}>Zalecamy konsultację lekarską w celu diagnostyki</Text>
+          <Text style={styles.resultSub}>Umów standardową wizytę, gdy będzie Ci dogodnie.</Text>
+          <Pressable
+            style={styles.ctaDoctor}
+            onPress={() => navigateToAutoAssign(false)}
+            accessibilityRole="button">
+            <Ionicons name="medkit" size={26} color="#FFF" />
+            <Text style={styles.ctaDoctorText}>Umów termin</Text>
+          </Pressable>
+          {summaryBlock}
+          <Pressable style={styles.textLinkBtn} onPress={exitTriageHome}>
+            <Text style={styles.textLink}>Wróć na stronę główną</Text>
+          </Pressable>
         </View>
       );
-    }
-
-    if (step === 3 && selectedPath === 'triage') {
-      return (
-        <View style={styles.content}>
-          <View style={styles.topBar}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={resetToStep1}
-              accessibilityRole="button"
-              accessibilityLabel="Wróć do menu głównego">
-              <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
-              <Text style={styles.backButtonText}>Wstecz</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.header}>Czy masz duszności lub ból w klatce?</Text>
-          <Text style={styles.subheader}>
-            Jeśli tak, możesz wymagać pilniejszej pomocy. Dokładnie przeczytaj poniższe przykłady.
-          </Text>
-
-          <View style={styles.flagsList}>
-            <View style={styles.flagItem}>
-              <View style={styles.flagIconWrapper}>
-                <Ionicons name="alert-circle-outline" size={26} color={COLORS.danger} />
-              </View>
-              <Text style={styles.flagText}>Silny ból w klatce piersiowej</Text>
-            </View>
-
-            <View style={styles.flagItem}>
-              <View style={styles.flagIconWrapper}>
-                <Ionicons name="alert-circle-outline" size={26} color={COLORS.danger} />
-              </View>
-              <Text style={styles.flagText}>Duszności / Problemy z oddychaniem</Text>
-            </View>
-
-            <View style={styles.flagItem}>
-              <View style={styles.flagIconWrapper}>
-                <Ionicons name="alert-circle-outline" size={26} color={COLORS.danger} />
-              </View>
-              <Text style={styles.flagText}>Zaburzenia mowy lub widzenia</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.primaryButtonDanger]}
-            activeOpacity={0.9}
-            onPress={() => {
-              setSelectedPath('urgent');
-              setStep(2);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Tak, mam takie objawy – przejdź do pilnego kontaktu">
-            <Text style={styles.primaryButtonText}>Tak, mam takie objawy</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            activeOpacity={0.9}
-            onPress={() => setStep(4)}
-            accessibilityRole="button"
-            accessibilityLabel="Nie, żaden z powyższych objawów – przejdź do wyboru terminu">
-            <Text style={styles.secondaryButtonText}>Nie, żadne z powyższych</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (step === 4) {
-      return (
-        <View style={styles.content}>
-          <View style={styles.topBar}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => setStep(3)}
-              accessibilityRole="button"
-              accessibilityLabel="Wróć do poprzedniego kroku">
-              <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
-              <Text style={styles.backButtonText}>Wstecz</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.header}>Czego dokładnie dotyczy Twój problem?</Text>
-          <Text style={styles.subheader}>Wybierz kategorię, która najlepiej pasuje do Twojej sytuacji.</Text>
-
-          <View style={styles.categoryList}>
-            <TouchableOpacity
-              style={[
-                styles.categoryCard,
-                selectedCategory === 'infection' && styles.categoryCardSelected,
-              ]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedCategory('infection');
-                setStep(5);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Infekcja: kaszel, katar lub gorączka">
-              <View style={styles.categoryIconWrapper}>
-                <Ionicons name="thermometer-outline" size={28} color={COLORS.primary} />
-              </View>
-              <View style={styles.categoryTextContainer}>
-                <Text style={styles.categoryTitle}>Infekcja</Text>
-                <Text style={styles.categorySubtitle}>Kaszel, katar, gorączka</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.categoryCard,
-                selectedCategory === 'results' && styles.categoryCardSelected,
-              ]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedCategory('results');
-                setStep(5);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Omówienie wyników lub skierowanie">
-              <View style={styles.categoryIconWrapper}>
-                <Ionicons name="document-text-outline" size={28} color={COLORS.primary} />
-              </View>
-              <View style={styles.categoryTextContainer}>
-                <Text style={styles.categoryTitle}>Omówienie wyników / Skierowanie</Text>
-                <Text style={styles.categorySubtitle}>Badania, konsultacja, dokumenty</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.categoryCard,
-                selectedCategory === 'chronic' && styles.categoryCardSelected,
-              ]}
-              activeOpacity={0.9}
-              onPress={() => {
-                setSelectedCategory('chronic');
-                setStep(5);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Ból przewlekły: plecy, stawy i inne">
-              <View style={styles.categoryIconWrapper}>
-                <Ionicons name="body-outline" size={28} color={COLORS.primary} />
-              </View>
-              <View style={styles.categoryTextContainer}>
-                <Text style={styles.categoryTitle}>Ból przewlekły</Text>
-                <Text style={styles.categorySubtitle}>Plecy, stawy, inne narządy ruchu</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    if (step === 5) {
-      return (
-        <View style={styles.content}>
-          <View style={styles.topBar}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => setStep(4)}
-              accessibilityRole="button"
-              accessibilityLabel="Wróć do wyboru kategorii problemu">
-              <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
-              <Text style={styles.backButtonText}>Wstecz</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.header}>Wybierz preferowany termin</Text>
-          <Text style={styles.subheader}>
-            To tylko wstępna propozycja. Rejestracja potwierdzi dokładną godzinę wizyty.
-          </Text>
-
-          <View style={styles.dateGrid}>
-            <TouchableOpacity
-              style={[
-                styles.dateCard,
-                selectedDate === 'today' && styles.dateCardSelected,
-              ]}
-              activeOpacity={0.9}
-              onPress={() => setSelectedDate('today')}
-              accessibilityRole="button"
-              accessibilityLabel="Dzisiaj">
-              <Ionicons
-                name="sunny-outline"
-                size={28}
-                color={selectedDate === 'today' ? COLORS.primary : COLORS.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.dateLabel,
-                  selectedDate === 'today' && styles.dateLabelSelected,
-                ]}>
-                Dzisiaj
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.dateCard,
-                selectedDate === 'tomorrow' && styles.dateCardSelected,
-              ]}
-              activeOpacity={0.9}
-              onPress={() => setSelectedDate('tomorrow')}
-              accessibilityRole="button"
-              accessibilityLabel="Jutro">
-              <Ionicons
-                name="today-outline"
-                size={28}
-                color={selectedDate === 'tomorrow' ? COLORS.primary : COLORS.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.dateLabel,
-                  selectedDate === 'tomorrow' && styles.dateLabelSelected,
-                ]}>
-                Jutro
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.primaryButtonFull]}
-            activeOpacity={0.9}
-            onPress={handleConfirmReservation}
-            accessibilityRole="button"
-            accessibilityLabel="Potwierdź wstępną rezerwację terminu wizyty">
-            <Text style={styles.primaryButtonText}>Potwierdź rezerwację</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    // Step 6 – success
-    let confirmationText = '';
-    if (selectedPath === 'prescription') {
-      confirmationText =
-        'Twoja prośba o przedłużenie recepty została wysłana do lekarza prowadzącego. Otrzymasz powiadomienie z kodem PIN.';
-    } else if (selectedPath === 'urgent') {
-      confirmationText =
-        'Twoje pilne zgłoszenie trafiło do Rejestracji. Skontaktujemy się z Tobą telefonicznie w ciągu kilkunastu minut.';
-    } else if (selectedPath === 'triage') {
-      confirmationText =
-        'Termin wizyty został wstępnie zarezerwowany. Potwierdzenie znajdziesz w zakładce Historia.';
-    } else {
-      confirmationText =
-        'Twoje zgłoszenie zostało zapisane. W razie potrzeby skontaktujemy się z Tobą telefonicznie.';
     }
 
     return (
-      <View style={styles.successContainer}>
-        <View style={styles.successIconCircle}>
-          <Ionicons name="checkmark-circle" size={80} color={COLORS.success} />
+      <View style={styles.block}>
+        <Text style={styles.resultHeadline}>Twój stan nie wymaga interwencji lekarskiej</Text>
+        <Text style={styles.resultSub}>Możesz kontynuować obserwację w domu.</Text>
+        <View style={styles.selfcareCard}>
+          <Text style={styles.selfcareCardTitle}>Zalecenia</Text>
+          <Text style={styles.selfcareCardText}>
+            Nawadniaj organizm, odpoczywaj, stosuj dostępne w aptece środki łagodzące.
+          </Text>
         </View>
-        <Text style={styles.successTitle}>Gotowe!</Text>
-        <Text style={styles.successText}>{confirmationText}</Text>
-
-        <TouchableOpacity
-          style={[styles.primaryButton, styles.primaryButtonFull, styles.successButton]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/')}
-          accessibilityRole="button"
-          accessibilityLabel="Wróć na stronę główną">
-          <Text style={styles.primaryButtonText}>Wróć na stronę główną</Text>
-        </TouchableOpacity>
+        {summaryBlock}
+        <Pressable style={styles.primaryBtn} onPress={exitTriageHome} accessibilityRole="button">
+          <Text style={styles.primaryBtnText}>Zakończ zgłoszenie</Text>
+        </Pressable>
       </View>
     );
   };
 
+  const renderBody = () => {
+    if (currentStep === RESULT_STEP && outcome && doctorSummary) {
+      return renderResults();
+    }
+
+    switch (currentStep) {
+      case 0:
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>W czym możemy pomóc?</Text>
+            {renderChoiceButton('Mam nowy objaw', () => {
+              setAnswers((a) => ({ ...a, introReason: 'nowy_objaw' }));
+              goNext(1);
+            })}
+            {renderChoiceButton('Pogorszenie stanu zdrowia', () => {}, { disabled: true })}
+            {renderChoiceButton('Sprawa administracyjna', () => {}, { disabled: true })}
+          </View>
+        );
+
+      case 1:
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Co Ci dolega?</Text>
+            {renderChoiceButton('Kaszel', () => {
+              setAnswers((a) => ({ ...a, mainSymptom: 'kaszel' }));
+              goNext(2);
+            })}
+            {renderChoiceButton('Gorączka', () => {}, { disabled: true })}
+            {renderChoiceButton('Ból gardła', () => {}, { disabled: true })}
+            {renderChoiceButton('Katar', () => {}, { disabled: true })}
+            {renderChoiceButton('Duszność', () => {}, { disabled: true })}
+            {renderChoiceButton('Ból w klatce', () => {}, { disabled: true })}
+            {renderChoiceButton('Inne', () => {}, { disabled: true })}
+          </View>
+        );
+
+      case 2:
+        return (
+          <View style={styles.block}>
+            <Text style={styles.safetyLead}>Najpierw sprawdzimy, czy nie wymagasz pilnej pomocy.</Text>
+            <Pressable style={styles.primaryBtn} onPress={() => goNext(3)} accessibilityRole="button">
+              <Text style={styles.primaryBtnText}>Dalej</Text>
+            </Pressable>
+          </View>
+        );
+
+      case 3:
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz któryś z objawów?</Text>
+            {renderChoiceButton('Bardzo nasilona duszność', () => openEmergency('dusznosc', 3))}
+            {renderChoiceButton('Nie możesz mówić pełnymi zdaniami', () => openEmergency('nie_mowa', 3))}
+            {renderChoiceButton('Silny ból w klatce', () => openEmergency('bol_klatki', 3))}
+            {renderChoiceButton('Utrata przytomności', () => openEmergency('utrata_przytomnosci', 3))}
+            <Pressable style={styles.secondaryCta} onPress={() => goNext(4)} accessibilityRole="button">
+              <Text style={styles.secondaryCtaText}>Pokaż kolejne</Text>
+            </Pressable>
+          </View>
+        );
+
+      case 4:
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz któryś z objawów?</Text>
+            {renderChoiceButton('Objawy udaru', () => openEmergency('udar', 4))}
+            {renderChoiceButton('Silne krwawienie', () => openEmergency('krwawienie', 4))}
+            {renderChoiceButton('Obrzęk gardła', () => openEmergency('obrzęk_gardla', 4))}
+            <Pressable
+              style={styles.secondaryCta}
+              onPress={() => {
+                setAnswers((a) => ({ ...a, acute: 'brak' }));
+                goNext(5);
+              }}
+              accessibilityRole="button">
+              <Text style={styles.secondaryCtaText}>Żadne z powyższych</Text>
+            </Pressable>
+          </View>
+        );
+
+      case 5: {
+        const onHeavy = (key: HeavyKey) => {
+          setAnswers((a) => ({ ...a, heavy: key }));
+          goNext(6);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy czujesz się bardzo źle?</Text>
+            {renderChoiceButton('Bardzo osłabiony', () => onHeavy('oslabiony'))}
+            {renderChoiceButton('Wysoka gorączka i złe samopoczucie', () => onHeavy('goraczka_zle'))}
+            {renderChoiceButton('Splątanie', () => onHeavy('splatanie'))}
+            {renderChoiceButton('Bardzo szybki oddech', () => onHeavy('szybki_oddech'))}
+            {renderChoiceButton('Nie', () => onHeavy('nie'))}
+          </View>
+        );
+      }
+
+      case 6: {
+        const onDehydration = (key: DehydrationKey) => {
+          setAnswers((a) => ({ ...a, dehydration: key }));
+          goNext(7);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz problem z piciem lub oddawaniem moczu?</Text>
+            {renderChoiceButton('Nie mogę pić', () => onDehydration('nie_pije'))}
+            {renderChoiceButton('Wymiotuję intensywnie', () => onDehydration('wymioty'))}
+            {renderChoiceButton('Nie oddaję moczu', () => onDehydration('brak_moczu'))}
+            {renderChoiceButton('Brak problemu', () => onDehydration('brak'))}
+          </View>
+        );
+      }
+
+      case 7: {
+        const onMental = (key: MentalKey) => {
+          setAnswers((a) => ({ ...a, mental: key }));
+          goNext(8);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz myśli o zrobieniu sobie krzywdy?</Text>
+            {renderChoiceButton('Tak', () => onMental('tak'), { danger: true })}
+            {renderChoiceButton('Nie', () => onMental('nie'))}
+          </View>
+        );
+      }
+
+      case 8: {
+        const onType = (coughType: CoughType) => {
+          setAnswers((a) => ({ ...a, coughType }));
+          goNext(9);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Jaki masz kaszel?</Text>
+            {renderChoiceButton('Suchy', () => onType('suchy'))}
+            {renderChoiceButton('Mokry', () => onType('mokry'))}
+            {renderChoiceButton('Nie wiem', () => onType('nie_wiem'))}
+          </View>
+        );
+      }
+
+      case 9: {
+        const onDur = (duration: CoughDuration) => {
+          setAnswers((a) => ({ ...a, duration }));
+          goNext(10);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Od ilu dni kaszlesz?</Text>
+            {renderChoiceButton('Mniej niż 1 dzień', () => onDur('lt1'))}
+            {renderChoiceButton('1–3 dni', () => onDur('d1_3'))}
+            {renderChoiceButton('4–7 dni', () => onDur('d4_7'))}
+            {renderChoiceButton('Ponad tydzień', () => onDur('d7plus'))}
+          </View>
+        );
+      }
+
+      case 10: {
+        const onFever = (fever: FeverLevel) => {
+          setAnswers((a) => ({ ...a, fever }));
+          goNext(11);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz gorączkę?</Text>
+            {renderChoiceButton('Brak', () => onFever('brak'))}
+            {renderChoiceButton('Poniżej 38 °C', () => onFever('lt38'))}
+            {renderChoiceButton('38–39 °C', () => onFever('38_39'))}
+            {renderChoiceButton('Powyżej 39 °C', () => onFever('gt39'))}
+          </View>
+        );
+      }
+
+      case 11: {
+        const onBreath = (breath: BreathLevel) => {
+          setAnswers((a) => ({ ...a, breath }));
+          goNext(12);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz trudność w oddychaniu?</Text>
+            {renderChoiceButton('Nie', () => onBreath('nie'))}
+            {renderChoiceButton('Lekkie', () => onBreath('lekkie'))}
+            {renderChoiceButton('Umiarkowane', () => onBreath('umiarkowane'))}
+            {renderChoiceButton('Duże', () => onBreath('duze'))}
+          </View>
+        );
+      }
+
+      case 12: {
+        const onSputum = (sputum: Sputum) => {
+          setAnswers((a) => ({ ...a, sputum }));
+          goNext(13);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy odkrztuszasz wydzielinę?</Text>
+            {renderChoiceButton('Brak', () => onSputum('brak'))}
+            {renderChoiceButton('Jasna', () => onSputum('jasna'))}
+            {renderChoiceButton('Żółta lub zielona', () => onSputum('zolta_zielona'))}
+            {renderChoiceButton('Z krwią', () => onSputum('krew'), { danger: true })}
+          </View>
+        );
+      }
+
+      case 13: {
+        const row = (key: ExtraSymptomA, label: string) => (
+          <Pressable
+            key={key}
+            onPress={() => toggleExtraA(key)}
+            style={[styles.choiceBtn, answers.extraSymptoms.includes(key) && styles.choiceBtnSelected]}
+            accessibilityRole="button">
+            <Text
+              style={[
+                styles.choiceBtnText,
+                answers.extraSymptoms.includes(key) && styles.choiceBtnTextSelected,
+              ]}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz któryś z objawów dodatkowych?</Text>
+            <Text style={styles.hint}>Zaznacz pasujące lub przejdź dalej.</Text>
+            {row('bol_gardla', 'Ból gardła')}
+            {row('katar', 'Katar')}
+            {row('bol_zatok', 'Ból zatok')}
+            {row('bol_klatki_oddech', 'Ból w klatce przy oddychaniu')}
+            <Pressable style={styles.secondaryCta} onPress={() => goNext(14)} accessibilityRole="button">
+              <Text style={styles.secondaryCtaText}>Pokaż kolejne</Text>
+            </Pressable>
+          </View>
+        );
+      }
+
+      case 14: {
+        const row = (key: ExtraSymptomB, label: string) => (
+          <Pressable
+            key={key}
+            onPress={() => toggleExtraB(key)}
+            style={[styles.choiceBtn, answers.extraSymptoms.includes(key) && styles.choiceBtnSelected]}
+            accessibilityRole="button">
+            <Text
+              style={[
+                styles.choiceBtnText,
+                answers.extraSymptoms.includes(key) && styles.choiceBtnTextSelected,
+              ]}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Dalsze objawy dodatkowe</Text>
+            <Text style={styles.hint}>Opcjonalnie zaznacz lub przejdź dalej.</Text>
+            {row('bole_miesni', 'Bóle mięśni')}
+            {row('bol_uszu', 'Ból uszu')}
+            <Pressable style={styles.secondaryCta} onPress={() => goNext(15)} accessibilityRole="button">
+              <Text style={styles.secondaryCtaText}>Nie mam innych objawów</Text>
+            </Pressable>
+          </View>
+        );
+      }
+
+      case 15: {
+        const onBother = (bother: BotherLevel) => {
+          setAnswers((a) => ({ ...a, bother }));
+          goNext(16);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Jak bardzo objawy Ci przeszkadzają?</Text>
+            {renderChoiceButton('Lekko', () => onBother('lekko'))}
+            {renderChoiceButton('Umiarkowanie', () => onBother('umiarkowanie'))}
+            {renderChoiceButton('Bardzo', () => onBother('bardzo'))}
+          </View>
+        );
+      }
+
+      case 16: {
+        const onTrend = (trend: Trend) => {
+          setAnswers((a) => ({ ...a, trend }));
+          goNext(17);
+        };
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Jak się zmieniają objawy?</Text>
+            {renderChoiceButton('Poprawa', () => onTrend('poprawa'))}
+            {renderChoiceButton('Bez zmian', () => onTrend('bez_zmian'))}
+            {renderChoiceButton('Pogorszenie', () => onTrend('pogorszenie'))}
+            {renderChoiceButton('Było lepiej i znów gorzej', () => onTrend('wax_wane'))}
+          </View>
+        );
+      }
+
+      case 17: {
+        const toggleChronic = (key: ChronicKey) => {
+          setAnswers((a) => {
+            let next = [...a.chronic];
+            if (key === 'brak') next = ['brak'];
+            else {
+              next = next.filter((x) => x !== 'brak');
+              if (next.includes(key)) next = next.filter((x) => x !== key);
+              else next.push(key);
+            }
+            return { ...a, chronic: next };
+          });
+        };
+        const items: { key: ChronicKey; label: string }[] = [
+          { key: 'pluca', label: 'Płuca' },
+          { key: 'serce', label: 'Serce' },
+          { key: 'cukrzyca', label: 'Cukrzyca' },
+          { key: 'nowotwor', label: 'Nowotwór' },
+          { key: 'leki_odpornosc', label: 'Leki obniżające odporność' },
+          { key: 'brak', label: 'Brak' },
+        ];
+        return (
+          <View style={styles.block}>
+            <Text style={styles.question}>Czy masz choroby przewlekłe?</Text>
+            <Text style={styles.hint}>Wybierz wszystkie pasujące.</Text>
+            {items.map(({ key, label }) => (
+              <Pressable
+                key={key}
+                onPress={() => toggleChronic(key)}
+                style={[styles.choiceBtn, answers.chronic.includes(key) && styles.choiceBtnSelected]}
+                accessibilityRole="button">
+                <Text
+                  style={[
+                    styles.choiceBtnText,
+                    answers.chronic.includes(key) && styles.choiceBtnTextSelected,
+                  ]}>
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={() => {
+                const chronicFinal: ChronicKey[] =
+                  answers.chronic.length > 0 ? [...answers.chronic] : ['brak'];
+                const finalA: Answers = { ...answers, chronic: chronicFinal };
+                setAnswers(finalA);
+                finishFlow(finalA);
+              }}
+              accessibilityRole="button">
+              <Text style={styles.primaryBtnText}>Zakończ</Text>
+            </Pressable>
+          </View>
+        );
+      }
+
+      default:
+        return null;
+    }
+  };
+
+  if (emergencyExit) {
+    return (
+      <KillSwitchScreen
+        onRestart={() => {
+          setEmergencyExit(false);
+          setCurrentStep(0);
+          setAnswers(emptyAnswers());
+          setUrgencyFlags(0);
+        }}
+      />
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          {renderStepContent()}
-        </ScrollView>
-      </KeyboardAvoidingView>
+    <SafeAreaView style={styles.safe}>
+      {currentStep !== RESULT_STEP ? renderTopBar() : null}
+      {renderProgress()}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+        {renderBody()}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -516,320 +942,223 @@ export default function TriageScreen() {
 const SHADOW = Platform.select({
   ios: {
     shadowColor: COLORS.shadow,
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
   },
-  android: {
-    elevation: 4,
-  },
+  android: { elevation: 3 },
   default: {},
 });
 
 const styles = StyleSheet.create({
-  safeArea: {
+  safe: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  container: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 32,
+    paddingTop: 12,
+    paddingBottom: 40,
   },
-
-  content: {
-    flex: 1,
+  topBar: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
-
-  header: {
-    fontSize: 24,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+  },
+  backBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginLeft: 2,
+  },
+  progressWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+  },
+  block: {
+    gap: 12,
+  },
+  question: {
+    fontSize: 22,
     fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: 8,
+    lineHeight: 28,
   },
-  subheader: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    marginBottom: 24,
+  safetyLead: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    lineHeight: 28,
+    marginBottom: 16,
   },
-
-  cardsColumn: {
-    gap: 16,
+  hint: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginBottom: 8,
+    marginTop: -4,
   },
-
-  optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  choiceBtn: {
     backgroundColor: COLORS.card,
     borderRadius: 16,
     paddingVertical: 18,
-    paddingHorizontal: 16,
-    borderWidth: 1,
+    paddingHorizontal: 20,
+    borderWidth: 2,
     borderColor: COLORS.border,
     ...SHADOW,
   },
-  optionCardBlue: {},
-  optionCardRed: {},
-  optionCardGreen: {},
-
-  optionIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#DBEAFE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
+  choiceBtnSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
   },
-  optionTextContainer: {
-    flex: 1,
+  choiceBtnDisabled: {
+    opacity: 0.45,
   },
-  optionTitle: {
+  choiceBtnDanger: {
+    borderColor: COLORS.danger,
+    backgroundColor: COLORS.dangerSoft,
+  },
+  choiceBtnPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.99 }],
+  },
+  choiceBtnText: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     color: COLORS.textPrimary,
-    marginBottom: 4,
+    textAlign: 'center',
   },
-  optionSubtitle: {
-    fontSize: 15,
+  choiceBtnTextDisabled: {
     color: COLORS.textMuted,
   },
-
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  backButtonText: {
-    fontSize: 16,
+  choiceBtnTextSelected: {
     color: COLORS.primary,
-    marginLeft: 4,
-    fontWeight: '600',
   },
-
-  card: {
-    backgroundColor: COLORS.card,
+  choiceBtnTextLight: {
+    color: COLORS.danger,
+  },
+  secondaryCta: {
+    marginTop: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  secondaryCtaText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.primary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  primaryBtn: {
+    backgroundColor: COLORS.primary,
     borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginTop: 8,
+    ...SHADOW,
+  },
+  primaryBtnText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  resultHeadline: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    lineHeight: 30,
+    marginTop: 8,
+  },
+  resultSub: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    lineHeight: 24,
+  },
+  ctaDoctor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 18,
+    paddingVertical: 20,
+    marginTop: 8,
+    ...SHADOW,
+  },
+  ctaDoctorText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  selfcareCard: {
+    backgroundColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  selfcareCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  selfcareCardText: {
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    lineHeight: 24,
+  },
+  textLinkBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  textLink: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  summaryBox: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 24,
-    ...SHADOW,
+    marginBottom: 8,
   },
-
-  textArea: {
-    minHeight: 140,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-  },
-
-  primaryButton: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOW,
-  },
-  primaryButtonFull: {
-    backgroundColor: COLORS.primary,
-    marginTop: 4,
-  },
-  primaryButtonDanger: {
-    backgroundColor: COLORS.danger,
-    marginTop: 16,
-  },
-  primaryButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-
-  urgentBanner: {
-    backgroundColor: COLORS.dangerLight,
-    borderColor: COLORS.dangerLight,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  urgentIconWrapper: {
-    marginTop: 2,
-  },
-  urgentTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.danger,
-    marginBottom: 4,
-  },
-  urgentText: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-  },
-  urgentTextBold: {
-    fontWeight: '700',
-    color: COLORS.danger,
-  },
-
-  categoryList: {
-    marginTop: 8,
-    gap: 16,
-  },
-  categoryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    ...SHADOW,
-  },
-  categoryCardSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: '#DBEAFE',
-  },
-  categoryIconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#DBEAFE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  categoryTextContainer: {
-    flex: 1,
-  },
-  categoryTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 4,
-  },
-  categorySubtitle: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
-
-  flagsList: {
-    marginBottom: 24,
-    gap: 12,
-  },
-  flagItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    ...SHADOW,
-  },
-  flagIconWrapper: {
-    width: 40,
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  flagText: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-  },
-
-  dateGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    marginTop: 8,
-  },
-  dateCard: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    marginHorizontal: 4,
-    ...SHADOW,
-  },
-  dateCardSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: '#DBEAFE',
-  },
-  dateLabel: {
-    marginTop: 8,
-    fontSize: 16,
+  summaryText: {
+    fontSize: 15,
     color: COLORS.textSecondary,
-    fontWeight: '600',
-  },
-  dateLabelSelected: {
-    color: COLORS.primaryDark,
-  },
-
-  secondaryButton: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    backgroundColor: 'transparent',
-    marginTop: 12,
-  },
-  secondaryButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-
-  successContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 40,
-  },
-  successIconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: COLORS.successLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    ...SHADOW,
-  },
-  successTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-    marginBottom: 12,
-  },
-  successText: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: 10,
-    marginBottom: 32,
-  },
-  successButton: {
-    alignSelf: 'stretch',
+    lineHeight: 22,
   },
 });
-

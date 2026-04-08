@@ -180,8 +180,14 @@ export default function DashboardScreen() {
           {/* Secondary CTA */}
           <Pressable
             style={({ pressed }) => [styles.heroSecondaryCard, pressed && styles.heroSecondaryPressed]}
-            onPress={() => router.push('/booking' as never)}
-            accessibilityLabel="Umów wizytę – wybierz termin z kalendarza"
+            onPress={() => {
+              Alert.alert(
+                '',
+                'Przed umówieniem wizyty zweryfikujemy Twój stan zdrowia',
+                [{ text: 'OK', onPress: () => router.push('/triage' as never) }],
+              );
+            }}
+            accessibilityLabel="Umów wizytę – po potwierdzeniu przechodzisz do weryfikacji stanu zdrowia"
             accessibilityRole="button">
             <View style={styles.heroIconWrapperSecondary}>
               <Ionicons name="calendar-outline" size={30} color={COLORS.primary} />
@@ -191,7 +197,7 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.heroTextGroup}>
               <Text style={styles.heroTitleSecondary}>Umów wizytę</Text>
-              <Text style={styles.heroSubtitleSecondary}>Wybierz termin z kalendarza</Text>
+              <Text style={styles.heroSubtitleSecondary}>Najpierw krótka weryfikacja zdrowia</Text>
             </View>
             <Ionicons
               name="chevron-forward"
