@@ -904,7 +904,7 @@ export default function TriageScreen() {
             </Text>
           </View>
           {summaryBlock}
-          <Pressable style={styles.primaryBtn} onPress={exitTriageHome} accessibilityRole="button">
+          <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]} onPress={exitTriageHome} accessibilityRole="button">
             <Text style={styles.primaryBtnText}>Zakończ zgłoszenie</Text>
           </Pressable>
           <Pressable style={styles.textLinkBtn} onPress={exitTriageHome}>
@@ -967,7 +967,7 @@ export default function TriageScreen() {
           </Text>
         </View>
         {summaryBlock}
-        <Pressable style={styles.primaryBtn} onPress={exitTriageHome} accessibilityRole="button">
+        <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]} onPress={exitTriageHome} accessibilityRole="button">
           <Text style={styles.primaryBtnText}>Zakończ zgłoszenie</Text>
         </Pressable>
       </View>
@@ -1031,7 +1031,7 @@ export default function TriageScreen() {
         return (
           <View style={styles.block}>
             <Text style={styles.safetyLead}>Najpierw sprawdzimy, czy nie wymagasz pilnej pomocy.</Text>
-            <Pressable style={styles.primaryBtn} onPress={() => goNext(3)} accessibilityRole="button">
+            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]} onPress={() => goNext(3)} accessibilityRole="button">
               <Text style={styles.primaryBtnText}>Dalej</Text>
             </Pressable>
           </View>
@@ -1328,7 +1328,7 @@ export default function TriageScreen() {
               </Pressable>
             ))}
             <Pressable
-              style={styles.primaryBtn}
+              style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]}
               onPress={() => {
                 const chronicFinal: ChronicKey[] =
                   answers.chronic.length > 0 ? [...answers.chronic] : ['brak'];
@@ -1451,7 +1451,7 @@ export default function TriageScreen() {
                 </Text>
               </Pressable>
             ))}
-            <Pressable style={styles.primaryBtn} onPress={() => goNext(104)} accessibilityRole="button">
+            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]} onPress={() => goNext(104)} accessibilityRole="button">
               <Text style={styles.primaryBtnText}>Dalej</Text>
             </Pressable>
           </View>
@@ -1497,7 +1497,7 @@ export default function TriageScreen() {
               accessibilityRole="button">
               <Text style={styles.secondaryCtaText}>Brak</Text>
             </Pressable>
-            <Pressable style={styles.primaryBtn} onPress={() => goNext(105)} accessibilityRole="button">
+            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]} onPress={() => goNext(105)} accessibilityRole="button">
               <Text style={styles.primaryBtnText}>Dalej</Text>
             </Pressable>
           </View>
@@ -1901,7 +1901,7 @@ export default function TriageScreen() {
               accessibilityRole="button">
               <Text style={styles.secondaryCtaText}>Brak</Text>
             </Pressable>
-            <Pressable style={styles.primaryBtn} onPress={() => goNext(115)} accessibilityRole="button">
+            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.choiceBtnPressed]} onPress={() => goNext(115)} accessibilityRole="button">
               <Text style={styles.primaryBtnText}>Dalej</Text>
             </Pressable>
           </View>
@@ -2097,15 +2097,18 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   primaryBtn: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.card,
     borderRadius: 16,
     paddingVertical: 18,
+    paddingHorizontal: 20,
     alignItems: 'center',
     marginTop: 8,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
     ...SHADOW,
   },
   primaryBtnText: {
-    color: '#fff',
+    color: COLORS.primary,
     fontSize: 18,
     fontWeight: '700',
   },
