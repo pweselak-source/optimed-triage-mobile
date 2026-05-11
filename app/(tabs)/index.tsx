@@ -180,14 +180,8 @@ export default function DashboardScreen() {
           {/* Secondary CTA */}
           <Pressable
             style={({ pressed }) => [styles.heroSecondaryCard, pressed && styles.heroSecondaryPressed]}
-            onPress={() => {
-              Alert.alert(
-                '',
-                'Przed umówieniem wizyty zweryfikujemy Twój stan zdrowia',
-                [{ text: 'OK', onPress: () => router.push('/triage' as never) }],
-              );
-            }}
-            accessibilityLabel="Umów wizytę – po potwierdzeniu przechodzisz do weryfikacji stanu zdrowia"
+            onPress={handleTriagePress}
+            accessibilityLabel="Umów wizytę – przejdź do szybkiej ankiety"
             accessibilityRole="button">
             <View style={styles.heroIconWrapperSecondary}>
               <Ionicons name="calendar-outline" size={30} color={COLORS.primary} />
